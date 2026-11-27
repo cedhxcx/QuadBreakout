@@ -261,6 +261,14 @@ assert.equal(AI.getMove(roamingBot, roamingBot.players[0], () => 0.01), -1, 'roa
 const reactingBot = makeDifficultyThreat(3);
 assert.equal(AI.getMove(reactingBot, reactingBot.players[0], sequenceRandom([0.5, 0.9, 0.5, 0.5])), -1, 'high-difficulty bots react earlier to an incoming ball');
 
+const movingInterceptBot = makeDifficultyThreat(3);
+assert.equal(AI.getMove(movingInterceptBot, movingInterceptBot.players[0], sequenceRandom([0.1, 0.5, 0.5, 0.5])), 0, 'intercept movement starts from the planned contact point');
+movingInterceptBot.elapsedMs = 400;
+assert.equal(AI.getMove(movingInterceptBot, movingInterceptBot.players[0], () => 0.99), 1, 'bots make a lateral adjustment while tracking an incoming ball');
+movingInterceptBot.players[0].position = 0.54;
+movingInterceptBot.elapsedMs = 450;
+assert.equal(AI.getMove(movingInterceptBot, movingInterceptBot.players[0], () => 0.01), -1, 'bots keep moving around the intercept point instead of stopping there');
+
 function makeEmptyPowerupState() {
   const state = createPlayingState(2);
   state.balls = [];

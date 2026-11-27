@@ -4,9 +4,9 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const randomRange = (min, max, random) => min + (max - min) * random();
   const profiles = {
-    1: { reactionFrames: 20, roamRadius: 0.42, minShift: 0.14, aimError: 0.2, roamMinMs: 500, roamMaxMs: 950 },
-    2: { reactionFrames: 42, roamRadius: 0.3, minShift: 0.11, aimError: 0.1, roamMinMs: 700, roamMaxMs: 1200 },
-    3: { reactionFrames: 72, roamRadius: 0.2, minShift: 0.08, aimError: 0.04, roamMinMs: 850, roamMaxMs: 1400 }
+    1: { reactionFrames: 20, roamRadius: 0.42, minShift: 0.14, aimError: 0.2, roamMinMs: 500, roamMaxMs: 950, interceptRadius: 0.12, interceptMinShift: 0.06, interceptMoveMinMs: 220, interceptMoveMaxMs: 360 },
+    2: { reactionFrames: 42, roamRadius: 0.3, minShift: 0.11, aimError: 0.1, roamMinMs: 700, roamMaxMs: 1200, interceptRadius: 0.09, interceptMinShift: 0.05, interceptMoveMinMs: 250, interceptMoveMaxMs: 400 },
+    3: { reactionFrames: 72, roamRadius: 0.2, minShift: 0.08, aimError: 0.04, roamMinMs: 850, roamMaxMs: 1400, interceptRadius: 0.065, interceptMinShift: 0.04, interceptMoveMinMs: 300, interceptMoveMaxMs: 500 }
   };
 
   function chooseImpactOffset(random) {
@@ -36,10 +36,15 @@
 
     const contactOffset = chooseImpactOffset(random) * paddleLength / 2;
     const aimError = (random() * 2 - 1) * travel * profile.aimError;
+    const aimPosition = clamp(0.5 + (candidate.alongSide - contactOffset + aimError) / travel, 0, 1);
     return {
       ballId: candidate.ball.id,
       mode: 'intercept',
-      targetPosition: clamp(0.5 + (candidate.alongSide - contactOffset + aimError) / travel, 0, 1),
+      contactOffset,
+      aimError,
+      aimPosition,
+      targetPosition: aimPosition,
+      nextMoveAt: now + randomRange(profile.interceptMoveMinMs, profile.interceptMoveMaxMs, random),
       expiresAt: now + Math.max(250, candidate.time * (1000 / 60) + 350)
     };
   }
@@ -82,6 +87,24 @@
       plan = makePlan(state, best, player, profile, paddleLength, travel, rand);
       plans.set(player, plan);
       focused = best;
+    }
+
+    if (plan.mode === 'intercept' && focused) {
+      plan.aimPosition = clamp(0.5 + (focused.alongSide - plan.contactOffset + plan.aimError) / travel, 0, 1);
+      if (now >= plan.nextMoveAt || (plan.hasWandered && Math.abs(plan.targetPosition - player.position) < 0.02)) {
+        const urgency = clamp(focused.time / profile.reactionFrames, 0.25, 1);
+        const radius = profile.interceptRadius * (0.55 + urgency * 0.45);
+        const minPosition = clamp(plan.aimPosition - radius, 0.04, 0.96);
+        const maxPosition = clamp(plan.aimPosition + radius, 0.04, 0.96);
+        let targetPosition = clamp(plan.aimPosition + (rand() * 2 - 1) * radius, minPosition, maxPosition);
+        if (Math.abs(targetPosition - player.position) < profile.interceptMinShift) {
+          const direction = rand() < 0.5 ? -1 : 1;
+          targetPosition = clamp(player.position + direction * profile.interceptMinShift, minPosition, maxPosition);
+        }
+        plan.targetPosition = targetPosition;
+        plan.nextMoveAt = now + randomRange(profile.interceptMoveMinMs, profile.interceptMoveMaxMs, rand);
+        plan.hasWandered = true;
+      }
     }
 
     const delta = plan.targetPosition - player.position;
