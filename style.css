@@ -116,6 +116,10 @@ h1 { margin-bottom: 12px; font-size: clamp(29px, 5vw, 43px); letter-spacing: -.0
 }
 .text-input::placeholder { color: #65728a; }
 .menu-actions { display: grid; gap: 10px; margin-top: 14px; }
+.invite-only-actions { display: grid; gap: 9px; margin-top: 14px; }
+.invite-only-actions p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.invite-only-actions strong { color: var(--accent); letter-spacing: .12em; }
+.invite-home-link { justify-self: center; color: var(--muted); font-size: 11px; }
 .join-row { display: grid; grid-template-columns: 1fr auto; gap: 9px; }
 .room-code-input { text-transform: uppercase; letter-spacing: .18em; }
 .button {

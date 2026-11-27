@@ -32,12 +32,17 @@
         <p class="intro">Rebata a bola, destrua os blocos e marque antes que ela atravesse sua defesa.</p>
         <label class="field-label" for="playerName">Seu nome</label>
         <input id="playerName" class="text-input" maxlength="16" autocomplete="nickname" value="Jogador">
-        <div class="menu-actions">
+        <div id="menuActions" class="menu-actions">
           <button id="createRoomBtn" class="button button-primary">Criar sala</button>
           <div class="join-row">
             <input id="roomCodeInput" class="text-input room-code-input" maxlength="4" placeholder="CÓDIGO" aria-label="Código da sala">
             <button id="joinRoomBtn" class="button button-secondary">Entrar</button>
           </div>
+        </div>
+        <div id="inviteOnlyActions" class="invite-only-actions" hidden>
+          <p>Convite para a sala <strong id="inviteRoomLabel"></strong>. Escolha seu nome e entre.</p>
+          <button id="inviteJoinBtn" class="button button-primary">Entrar no lobby</button>
+          <a href="./" class="invite-home-link">Voltar à página inicial</a>
         </div>
         <p id="menuStatus" class="status" role="status" aria-live="polite"></p>
         <div class="how-to-play">

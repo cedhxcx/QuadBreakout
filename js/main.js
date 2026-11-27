@@ -13,6 +13,7 @@
   let state = null;
   let isHost = false;
   let roomCode = '';
+  let inviteCode = '';
   let localIndex = 0;
   let currentScreen = '';
   let lastFrame = performance.now();
@@ -195,6 +196,7 @@
   }
 
   async function createRoom() {
+    if (inviteCode) return;
     const button = el('createRoomBtn');
     button.disabled = true;
     setStatus(el('menuStatus'), 'Criando sala...', false);
@@ -218,12 +220,12 @@
   }
 
   async function joinRoom() {
-    const code = el('roomCodeInput').value.trim().toUpperCase();
+    const code = inviteCode || el('roomCodeInput').value.trim().toUpperCase();
     if (!/^[A-Z]{4}$/.test(code)) {
       setStatus(el('menuStatus'), 'Digite um código válido com 4 letras.', true);
       return;
     }
-    const button = el('joinRoomBtn');
+    const button = inviteCode ? el('inviteJoinBtn') : el('joinRoomBtn');
     button.disabled = true;
     setStatus(el('menuStatus'), 'Conectando à sala...', false);
     isHost = false;
@@ -329,11 +331,13 @@
     isHost = false;
     roomCode = '';
     updateRoomUrl('');
+    inviteCode = '';
     localIndex = 0;
     keys.clear();
     notice = '';
     showScreen('menu');
     setStatus(el('menuStatus'), '', false);
+    configureInviteMode();
   }
 
   function onKey(event, down) {
@@ -396,9 +400,25 @@
     requestAnimationFrame(loop);
   }
 
+  function configureInviteMode() {
+    const requestedCode = new URLSearchParams(location.search).get('room');
+    inviteCode = requestedCode && /^[A-Z]{4}$/i.test(requestedCode) ? requestedCode.toUpperCase() : '';
+    el('menuActions').hidden = Boolean(inviteCode);
+    el('inviteOnlyActions').hidden = !inviteCode;
+    el('inviteRoomLabel').textContent = inviteCode;
+    if (inviteCode) {
+      el('roomCodeInput').value = inviteCode;
+    } else if (requestedCode) {
+      setStatus(el('menuStatus'), 'Este link de convite não contém um código válido.', true);
+    } else {
+      el('roomCodeInput').value = '';
+    }
+  }
+
   function init() {
     el('createRoomBtn').addEventListener('click', createRoom);
     el('joinRoomBtn').addEventListener('click', joinRoom);
+    el('inviteJoinBtn').addEventListener('click', joinRoom);
     el('startGameBtn').addEventListener('click', startGame);
     el('copyInviteBtn').addEventListener('click', copyInvite);
     el('leaveGameBtn').addEventListener('click', returnToMenu);
@@ -406,8 +426,13 @@
     el('playerColorInput').addEventListener('change', changePlayerColor);
     el('roomCodeInput').addEventListener('input', event => { event.target.value = event.target.value.replace(/[^a-z]/gi, '').slice(0, 4).toUpperCase(); });
     el('roomCodeInput').addEventListener('keydown', event => { if (event.key === 'Enter') joinRoom(); });
-    const inviteCode = new URLSearchParams(location.search).get('room');
-    if (inviteCode && /^[A-Z]{4}$/i.test(inviteCode)) el('roomCodeInput').value = inviteCode.toUpperCase();
+    el('playerName').addEventListener('keydown', event => {
+      if (inviteCode && event.key === 'Enter') {
+        event.preventDefault();
+        joinRoom();
+      }
+    });
+    configureInviteMode();
     window.addEventListener('keydown', event => onKey(event, true));
     window.addEventListener('keyup', event => onKey(event, false));
     window.addEventListener('blur', () => keys.clear());
