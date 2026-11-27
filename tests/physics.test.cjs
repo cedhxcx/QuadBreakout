@@ -198,4 +198,30 @@ botState.players[0].bot = true;
 botState.balls = [{ id: 1, x: 180, y: 500, vx: -4, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
 assert.equal(AI.getMove(botState, botState.players[0]), -1, 'left-side bot tracks an incoming ball along its defense line');
 
+function makeBotStrikeState() {
+  const state = createPlayingState(2);
+  state.players[0].bot = true;
+  state.balls = [{ id: 1, x: 100, y: 400, vx: -4, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
+  return state;
+}
+
+function sequenceRandom(values) {
+  let index = 0;
+  return () => values[Math.min(index++, values.length - 1)];
+}
+
+const centerStrike = makeBotStrikeState();
+assert.equal(AI.getMove(centerStrike, centerStrike.players[0], sequenceRandom([0.1, 0.5, 0.5])), 0, 'bots can aim for the center of the paddle');
+
+const upperEdgeStrike = makeBotStrikeState();
+assert.equal(AI.getMove(upperEdgeStrike, upperEdgeStrike.players[0], sequenceRandom([0.5, 0.9, 0.5, 0.5])), -1, 'bots can target one side of the paddle');
+assert.equal(AI.getMove(upperEdgeStrike, upperEdgeStrike.players[0], () => 0.1), -1, 'the selected contact point stays stable while intercepting');
+upperEdgeStrike.elapsedMs = 5000;
+assert.equal(AI.getMove(upperEdgeStrike, upperEdgeStrike.players[0], sequenceRandom([0.5, 0.1, 0.5, 0.5])), 1, 'bots can choose the opposite side on a later intercept');
+
+const leftPatrol = createPlayingState(2);
+leftPatrol.players[0].bot = true;
+leftPatrol.balls = [{ id: 1, x: 400, y: 400, vx: 0, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
+assert.equal(AI.getMove(leftPatrol, leftPatrol.players[0], () => 0.1), -1, 'bots patrol instead of remaining centered when no ball is approaching');
+
 console.log('PASS: 2-8 player arenas, configurable respawn, multiball limits, particles, goals, bots, and match end.');
