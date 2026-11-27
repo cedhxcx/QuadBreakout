@@ -16,7 +16,7 @@
   <script defer src="js/main.js"></script>
 </head>
 <body>
-  <main class="app-shell">
+  <main id="appShell" class="app-shell">
     <header class="site-header">
       <a class="brand" href="./" aria-label="QuadBreakout início">
         <span class="brand-mark" aria-hidden="true">Q</span>
@@ -61,8 +61,14 @@
           </div>
           <div class="room-code-box"><span>CÓDIGO</span><strong id="roomCodeLabel">----</strong></div>
         </div>
-        <div class="lobby-content">
-          <div class="seat-list" id="seatList" aria-label="Jogadores e lados"></div>
+        <div id="lobbyContent" class="lobby-content">
+          <div class="lobby-roster">
+            <div class="seat-list" id="seatList" aria-label="Jogadores e lados"></div>
+            <div class="player-color-picker">
+              <label class="field-label" for="playerColorInput">Minha cor</label>
+              <input id="playerColorInput" class="color-input" type="color" value="#FF3B30" aria-label="Escolha sua cor">
+            </div>
+          </div>
           <aside id="lobbyOptions" class="lobby-options">
             <label class="field-label" for="playerCountInput">Jogadores na arena</label>
             <select id="playerCountInput" class="text-input">
@@ -78,7 +84,9 @@
             <input id="durationInput" class="text-input" type="number" min="1" max="10" value="2">
             <label class="field-label" for="scoreLimitInput">Pontos para vencer</label>
             <input id="scoreLimitInput" class="text-input" type="number" min="1" max="100" value="30">
-            <p class="hint">Lados vazios serão preenchidos por bots quando a partida começar.</p>
+            <label class="field-label" for="multiballIntervalInput">Intervalo entre blocos e multibolas (s)</label>
+            <input id="multiballIntervalInput" class="text-input" type="number" min="30" max="120" step="5" value="30">
+            <p class="hint">Lados vazios serão preenchidos por bots. Cores são exclusivas por jogador.</p>
           </aside>
         </div>
         <div class="lobby-footer">
@@ -96,6 +104,7 @@
         <div id="connectionLabel" class="connection-label">Conectando</div>
       </div>
       <div id="scoreboard" class="scoreboard" aria-label="Placar"></div>
+        <p id="brickRespawnTimer" class="brick-respawn-timer" role="status" aria-live="polite" hidden></p>
       <div class="arena-frame">
         <canvas id="gameCanvas" width="800" height="800" aria-label="Arena de jogo QuadBreakout"></canvas>
       </div>

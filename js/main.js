@@ -30,6 +30,7 @@
   function showScreen(name) {
     if (currentScreen === name) return;
     currentScreen = name;
+    document.body.classList.toggle('game-mode', name === 'game');
     Object.keys(screens).forEach(key => { screens[key].hidden = key !== name; });
   }
 
@@ -61,8 +62,12 @@
       </div>`;
     }).join('');
     el('lobbyOptions').hidden = !isHost;
+    el('lobbyContent').classList.toggle('client-lobby', !isHost);
     el('startGameBtn').hidden = !isHost;
     el('copyInviteBtn').hidden = !isHost;
+    const ownPlayer = state.players[localIndex];
+    el('playerColorInput').value = ownPlayer.color;
+    el('playerColorInput').disabled = state.phase !== 'LOBBY';
     el('playerCountInput').value = String(state.playerCount);
     const lastConnectedIndex = state.players.reduce((last, player) => player.connected ? Math.max(last, player.index) : last, 0);
     Array.from(el('playerCountInput').options).forEach(option => {
@@ -74,10 +79,32 @@
   }
 
   function showGame() {
+    const enteringGame = currentScreen !== 'game';
     showScreen('game');
-    el('gameRoomLabel').textContent = `Sala ${roomCode} • ${state.players[localIndex].sideName} (${state.players[localIndex].label})`;
-    el('connectionLabel').textContent = isHost ? 'HOST' : 'CONECTADO';
-    renderHud();
+    if (enteringGame) {
+      el('gameRoomLabel').textContent = `Sala ${roomCode} • ${state.players[localIndex].sideName} (${state.players[localIndex].label})`;
+      el('connectionLabel').textContent = isHost ? 'HOST' : 'CONECTADO';
+      renderHud();
+      requestAnimationFrame(resizeArena);
+    }
+  }
+
+  function resizeArena() {
+    if (currentScreen !== 'game') return;
+    const gameScreen = el('gameScreen');
+    const arena = gameScreen.querySelector('.arena-frame');
+    const otherElements = Array.from(gameScreen.children).filter(element =>
+      element !== arena && !element.hidden && window.getComputedStyle(element).display !== 'none'
+    );
+    const gap = Number.parseFloat(window.getComputedStyle(gameScreen).gap) || 0;
+    const shellStyle = window.getComputedStyle(el('appShell'));
+    const verticalPadding = (Number.parseFloat(shellStyle.paddingTop) || 0) + (Number.parseFloat(shellStyle.paddingBottom) || 0);
+    const occupiedHeight = otherElements.reduce((total, element) => total + element.getBoundingClientRect().height, 0)
+      + gap * otherElements.length
+      + verticalPadding;
+    const availableHeight = Math.floor(window.innerHeight - occupiedHeight);
+    const availableWidth = Math.floor(Math.min(1100, window.innerWidth * 0.96, availableHeight));
+    gameScreen.style.setProperty('--arena-size', `${Math.max(280, availableWidth)}px`);
   }
 
   function renderHud() {
@@ -86,6 +113,13 @@
     const seconds = Math.max(0, Math.ceil(state.timeLeftMs / 1000));
     const minutes = Math.floor(seconds / 60);
     el('gameTimer').textContent = `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+    const respawnTimer = el('brickRespawnTimer');
+    if (state.bricks.length === 0 && state.bricksRespawnMs > 0) {
+      respawnTimer.textContent = `Blocos reaparecem em ${Math.ceil(state.bricksRespawnMs / 1000)}s`;
+      respawnTimer.hidden = false;
+    } else {
+      respawnTimer.hidden = true;
+    }
     el('gameHint').textContent = state.balls.length > 1
       ? `${state.balls.length} bolas em jogo • Destrua blocos roxos para espalhar multibolas.`
       : 'Destrua blocos, defenda sua borda e mande a bola para os adversários.';
@@ -127,6 +161,11 @@
       onInput(index, move) {
         const player = state && state.players[index];
         if (state && state.phase === 'PLAYING' && player && player.connected && !player.bot) player.move = move;
+      },
+      onColor(index, color) {
+        if (!setPlayerColor(index, color)) return false;
+        notice = `${state.players[index].name} escolheu ${state.players[index].label}.`;
+        return true;
       },
       onDisconnect(index) {
         const player = state && state.players[index];
@@ -200,6 +239,10 @@
           if (state.phase === 'LOBBY') renderLobby();
           updatePhase();
         },
+        onColorRejected(message) {
+          notice = message || 'Não foi possível escolher essa cor.';
+          renderLobby();
+        },
         onError(message) {
           notice = message;
           el('connectionLabel').textContent = 'DESCONECTADO';
@@ -219,7 +262,7 @@
     if (!isHost || !state || state.phase !== 'LOBBY') return;
     const duration = Number(el('durationInput').value);
     const scoreLimit = Number(el('scoreLimitInput').value);
-    window.QB.Physics.startMatch(state, duration, scoreLimit);
+    window.QB.Physics.startMatch(state, duration, scoreLimit, undefined, el('multiballIntervalInput').value);
     notice = '';
     updatePhase();
     window.QB.Network.broadcastState(state);
@@ -237,6 +280,33 @@
     notice = `Arena configurada para ${state.playerCount} jogadores.`;
     renderLobby();
     window.QB.Network.broadcastState(state);
+  }
+
+  function setPlayerColor(index, color) {
+    if (!state || state.phase !== 'LOBBY') return false;
+    const player = state.players[index];
+    if (!player || !/^#[0-9a-f]{6}$/i.test(color)) return false;
+    const choice = C.PLAYERS.find(palette => palette.color.toLowerCase() === color.toLowerCase());
+    player.color = color.toUpperCase();
+    player.label = choice ? choice.label : 'Personalizada';
+    return true;
+  }
+
+  function changePlayerColor() {
+    if (!state || state.phase !== 'LOBBY') return;
+    const color = el('playerColorInput').value;
+    if (isHost) {
+      if (!setPlayerColor(localIndex, color)) {
+        notice = 'Não foi possível aplicar essa cor.';
+        renderLobby();
+        return;
+      }
+      notice = `Você escolheu ${state.players[localIndex].label}.`;
+      renderLobby();
+      window.QB.Network.broadcastState(state);
+    } else {
+      window.QB.Network.sendColor(color);
+    }
   }
 
   async function copyInvite() {
@@ -317,6 +387,7 @@
     el('copyInviteBtn').addEventListener('click', copyInvite);
     el('leaveGameBtn').addEventListener('click', returnToMenu);
     el('playerCountInput').addEventListener('change', changePlayerCount);
+    el('playerColorInput').addEventListener('change', changePlayerColor);
     el('roomCodeInput').addEventListener('input', event => { event.target.value = event.target.value.replace(/[^a-z]/gi, '').slice(0, 4).toUpperCase(); });
     el('roomCodeInput').addEventListener('keydown', event => { if (event.key === 'Enter') joinRoom(); });
     const inviteCode = new URLSearchParams(location.search).get('room');
@@ -324,6 +395,7 @@
     window.addEventListener('keydown', event => onKey(event, true));
     window.addEventListener('keyup', event => onKey(event, false));
     window.addEventListener('blur', () => keys.clear());
+    window.addEventListener('resize', resizeArena);
     window.addEventListener('beforeunload', () => window.QB.Network.leave());
     document.addEventListener('visibilitychange', () => { if (document.hidden) keys.clear(); });
     requestAnimationFrame(loop);

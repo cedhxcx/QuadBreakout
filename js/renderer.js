@@ -1,7 +1,9 @@
 (function () {
   const C = window.QB.C;
+  let backgroundCache = null;
+  let backgroundPlayerCount = null;
 
-  function drawBackground(ctx, state, arena) {
+  function drawBackground(ctx, arena) {
     const gradient = ctx.createRadialGradient(C.WIDTH / 2, C.HEIGHT / 2, 60, C.WIDTH / 2, C.HEIGHT / 2, 560);
     gradient.addColorStop(0, '#111d31');
     gradient.addColorStop(1, '#080d17');
@@ -49,14 +51,23 @@
     ctx.restore();
   }
 
+  function drawCachedBackground(ctx, playerCount, arena) {
+    if (!backgroundCache || backgroundPlayerCount !== playerCount) {
+      backgroundCache = document.createElement('canvas');
+      backgroundCache.width = C.WIDTH;
+      backgroundCache.height = C.HEIGHT;
+      drawBackground(backgroundCache.getContext('2d'), arena);
+      backgroundPlayerCount = playerCount;
+    }
+    ctx.drawImage(backgroundCache, 0, 0);
+  }
+
   function drawGoals(ctx, players, arena) {
     players.forEach(player => {
       const side = arena.sides[player.index];
       ctx.save();
       ctx.globalAlpha = 0.23;
       ctx.strokeStyle = player.color;
-      ctx.shadowColor = player.color;
-      ctx.shadowBlur = 12;
       ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.moveTo(side.start.x, side.start.y);
@@ -69,13 +80,7 @@
   function drawBricks(ctx, bricks) {
     bricks.forEach(brick => {
       ctx.save();
-      const color = brick.special ? '#c786ff' : '#6a7897';
-      ctx.shadowColor = color;
-      ctx.shadowBlur = brick.special ? 13 : 4;
-      const gradient = ctx.createLinearGradient(brick.x, brick.y, brick.x, brick.y + brick.height);
-      gradient.addColorStop(0, brick.special ? '#d9a5ff' : '#8999ba');
-      gradient.addColorStop(1, brick.special ? '#7045a7' : '#3a4966');
-      ctx.fillStyle = gradient;
+      ctx.fillStyle = brick.special ? '#76549b' : '#52617d';
       ctx.strokeStyle = brick.special ? '#efd5ff' : '#b9c9e6';
       ctx.lineWidth = brick.special ? 1.5 : 1;
       ctx.beginPath();
@@ -84,10 +89,10 @@
       ctx.stroke();
       if (brick.special) {
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 9px ui-sans-serif, system-ui';
+        ctx.font = 'bold 8px ui-sans-serif, system-ui';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('×20', brick.x + brick.width / 2, brick.y + brick.height / 2 + 0.5);
+        ctx.fillText(`×5 · ${brick.hitsRemaining}`, brick.x + brick.width / 2, brick.y + brick.height / 2 + 0.5);
       }
       ctx.restore();
     });
@@ -99,8 +104,7 @@
       ctx.save();
       ctx.translate(paddle.center.x, paddle.center.y);
       ctx.rotate(Math.atan2(paddle.tangent.y, paddle.tangent.x));
-      ctx.shadowColor = player.color;
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = 0;
       const gradient = ctx.createLinearGradient(-paddle.length / 2, 0, paddle.length / 2, 0);
       gradient.addColorStop(0, '#ffffff');
       gradient.addColorStop(0.22, player.color);
@@ -136,8 +140,6 @@
       });
       ctx.globalAlpha = 1;
       ctx.save();
-      ctx.shadowColor = ball.ownerColor;
-      ctx.shadowBlur = 18;
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
       ctx.fillStyle = ball.ownerColor;
@@ -163,7 +165,7 @@
   function draw(ctx, state) {
     if (!state) return;
     const arena = window.QB.Physics.getArenaGeometry(state.playerCount);
-    drawBackground(ctx, state, arena);
+    drawCachedBackground(ctx, state.playerCount, arena);
     drawGoals(ctx, state.players, arena);
     drawBricks(ctx, state.bricks || []);
     drawPaddles(ctx, state.players, state.playerCount, arena);

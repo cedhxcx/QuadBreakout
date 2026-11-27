@@ -69,6 +69,17 @@ assert.equal(lobby.players.length, 8);
 const twoPlayerState = createPlayingState(2);
 assert.equal(twoPlayerState.players[1].bot, true, 'vacant seats become bots at match start');
 assert.equal(twoPlayerState.balls[0].ownerColor, C.COLORS.neutral);
+assert.equal(twoPlayerState.bricks.filter(brick => brick.special).length, 2, 'the initial grid should contain only one or two special bricks');
+assert.ok(twoPlayerState.bricks.filter(brick => brick.special).every(brick =>
+  brick.hitsRemaining >= C.MULTIBALL_HITS_MIN && brick.hitsRemaining <= C.MULTIBALL_HITS_MAX
+), 'special bricks require two or three hits');
+assert.equal(twoPlayerState.bricks.length, C.BRICK_COLUMNS * C.BRICK_ROWS);
+assert.equal(C.PADDLE_LENGTH, 100, 'paddles should use the more compact size');
+assert.equal(Physics.makeBricks(() => 0, 2).filter(brick => brick.special).length, 1, 'a generated grid can have one special brick');
+
+const customRespawn = Physics.createLobbyState('Host', 'host', 2);
+Physics.startMatch(customRespawn, 2, 30, stableRandom, 45);
+assert.equal(customRespawn.brickRespawnIntervalMs, 45000, 'the host can configure the brick respawn interval');
 
 const goals = createPlayingState(4);
 goals.bricks = [];
@@ -100,13 +111,59 @@ assert.equal(ordinaryBrick.bricks.length, 0);
 assert.equal(ordinaryBrick.players[0].score, 1);
 assert.equal(ordinaryBrick.balls.length, 1, 'ordinary brick collisions keep one ball in play');
 
+const cappedParticles = createPlayingState(2);
+cappedParticles.bricks = [{ id: 1, x: 380, y: 390, width: 40, height: 20, special: false, hitsRemaining: 1 }];
+cappedParticles.particles = Array.from({ length: C.MAX_PARTICLES - 1 }, () => ({
+  x: 0, y: 0, vx: 0, vy: 0, color: '#fff', life: 1000, maxLife: 1000, size: 1
+}));
+cappedParticles.balls = [{ id: 1, x: 400, y: 380, vx: 0, vy: 4, radius: C.BALL_RADIUS, ownerColor: C.COLORS.red, ownerIndex: 0, isMain: true, trail: [] }];
+Physics.step(cappedParticles, 1000 / 60, {}, stableRandom);
+assert.equal(cappedParticles.particles.length, C.MAX_PARTICLES, 'particle effects stay within a fixed rendering budget');
+
+const delayedBricks = createPlayingState(2);
+delayedBricks.bricks = [{ id: 1, x: 380, y: 390, width: 40, height: 20, special: false, hitsRemaining: 1 }];
+delayedBricks.balls = [{ id: 1, x: 400, y: 380, vx: 0, vy: 4, radius: C.BALL_RADIUS, ownerColor: C.COLORS.red, ownerIndex: 0, isMain: true, trail: [] }];
+Physics.step(delayedBricks, 1000 / 60, {}, stableRandom);
+assert.equal(delayedBricks.bricks.length, 0);
+assert.ok(delayedBricks.bricksRespawnMs > C.BRICK_RESPAWN_MS - 100, 'the countdown should begin near 30 seconds');
+Physics.step(delayedBricks, C.BRICK_RESPAWN_MS - 100, {}, stableRandom);
+assert.equal(delayedBricks.bricks.length, 0, 'bricks should not return before the configured interval');
+Physics.step(delayedBricks, 100, {}, stableRandom);
+assert.equal(delayedBricks.bricks.length, C.BRICK_COLUMNS * C.BRICK_ROWS, 'the next brick grid returns when the interval expires');
+
 const multiball = createPlayingState(3);
-multiball.bricks = [{ id: 1, x: 380, y: 390, width: 40, height: 20, special: true }];
+multiball.bricks = [{ id: 1, x: 380, y: 390, width: 40, height: 20, special: true, hitsRemaining: 3 }];
 multiball.balls = [{ id: 1, x: 400, y: 380, vx: 0, vy: 4, radius: C.BALL_RADIUS, ownerColor: C.COLORS.green, ownerIndex: 2, isMain: true, trail: [] }];
-Physics.step(multiball, 1000 / 60, {}, stableRandom);
-assert.equal(multiball.balls.length, 1 + C.MULTIBALL_COUNT, 'special bricks spawn exactly 20 extra balls');
+for (let hit = 1; hit <= 3; hit++) {
+  const ball = multiball.balls[0];
+  ball.x = 400;
+  ball.y = 380;
+  ball.vx = 0;
+  ball.vy = 4;
+  Physics.step(multiball, 1000 / 60, {}, stableRandom);
+  if (hit < 3) assert.equal(multiball.bricks[0].hitsRemaining, 3 - hit, 'special bricks should survive their first hits');
+}
+assert.equal(multiball.bricks.length, 0, 'a multiball brick breaks after its required hits');
+assert.equal(multiball.balls.length, C.MAX_ACTIVE_BALLS, 'multiball is capped at five active balls total');
 assert.ok(multiball.balls.every(ball => ball.ownerColor === C.COLORS.green && ball.ownerIndex === 2));
 assert.equal(multiball.players[2].score, 1);
+
+const cappedMultiball = createPlayingState(2);
+cappedMultiball.bricks = [{ id: 1, x: 380, y: 390, width: 40, height: 20, special: true, hitsRemaining: 1 }];
+cappedMultiball.balls = Array.from({ length: C.MAX_ACTIVE_BALLS }, (_, index) => ({
+  id: index + 1,
+  x: index === 0 ? 400 : 100 + index * 20,
+  y: index === 0 ? 380 : 100,
+  vx: 0,
+  vy: index === 0 ? 4 : 0,
+  radius: C.BALL_RADIUS,
+  ownerColor: C.COLORS.green,
+  ownerIndex: 0,
+  isMain: index === 0,
+  trail: []
+}));
+Physics.step(cappedMultiball, 1000 / 60, {}, stableRandom);
+assert.equal(cappedMultiball.balls.length, C.MAX_ACTIVE_BALLS, 'additional multiball bricks cannot exceed the active ball cap');
 
 const wallBounce = createPlayingState(2);
 wallBounce.bricks = [];
@@ -141,4 +198,4 @@ botState.players[0].bot = true;
 botState.balls = [{ id: 1, x: 180, y: 500, vx: -4, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
 assert.equal(AI.getMove(botState, botState.players[0]), -1, 'left-side bot tracks an incoming ball along its defense line');
 
-console.log('PASS: 2-8 player arenas, lobby resizing, goals, bricks, multiball, respawns, bots, and match end.');
+console.log('PASS: 2-8 player arenas, configurable respawn, multiball limits, particles, goals, bots, and match end.');

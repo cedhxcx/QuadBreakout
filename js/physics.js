@@ -51,6 +51,7 @@
       timeLeftMs: 0,
       timeLimitMs: 120000,
       scoreLimit: 30,
+      brickRespawnIntervalMs: C.BRICK_RESPAWN_MS,
       emptyMs: 0,
       bricksRespawnMs: 0,
       nextBallId: 1,
@@ -67,7 +68,16 @@
     state.players = Array.from({ length: count }, (_, index) => {
       const old = oldPlayers[index];
       const base = old || makePlayer(index, `Vaga ${C.PLAYERS[index].label}`, null, false, count);
-      return { ...base, ...playerDescriptor(count, index), index, position: 0.5, move: 0 };
+      const descriptor = playerDescriptor(count, index);
+      return {
+        ...base,
+        ...descriptor,
+        color: base.color || descriptor.color,
+        label: base.label || descriptor.label,
+        index,
+        position: 0.5,
+        move: 0
+      };
     });
     return true;
   }
@@ -157,17 +167,29 @@
     const gridHeight = C.BRICK_ROWS * brickHeight + (C.BRICK_ROWS - 1) * gap;
     const startX = (C.WIDTH - gridWidth) / 2;
     const startY = (C.HEIGHT - gridHeight) / 2;
+    const brickCount = C.BRICK_COLUMNS * C.BRICK_ROWS;
+    const specialCount = C.MULTIBALL_BRICKS_MIN + Math.floor(rand() * (C.MULTIBALL_BRICKS_MAX - C.MULTIBALL_BRICKS_MIN + 1));
+    const specialIndices = Array.from({ length: brickCount }, (_, index) => index);
+    for (let index = brickCount - 1; index > 0; index--) {
+      const swapIndex = Math.min(index, Math.floor(rand() * (index + 1)));
+      [specialIndices[index], specialIndices[swapIndex]] = [specialIndices[swapIndex], specialIndices[index]];
+    }
+    const specialBricks = new Set(specialIndices.slice(0, specialCount));
     const bricks = [];
     let id = 0;
     for (let row = 0; row < C.BRICK_ROWS; row++) {
       for (let column = 0; column < C.BRICK_COLUMNS; column++) {
+        const special = specialBricks.has(id);
         bricks.push({
           id: id++,
           x: startX + column * (brickWidth + gap),
           y: startY + row * (brickHeight + gap),
           width: brickWidth,
           height: brickHeight,
-          special: rand() < C.MULTIBALL_CHANCE
+          special,
+          hitsRemaining: special
+            ? C.MULTIBALL_HITS_MIN + Math.floor(rand() * (C.MULTIBALL_HITS_MAX - C.MULTIBALL_HITS_MIN + 1))
+            : 1
         });
       }
     }
@@ -189,7 +211,7 @@
     };
   }
 
-  function startMatch(state, durationMinutes, scoreLimit, random) {
+  function startMatch(state, durationMinutes, scoreLimit, random, multiballIntervalSeconds) {
     const rand = random || Math.random;
     state.players.forEach(player => {
       if (!player.connected) {
@@ -205,6 +227,11 @@
     state.timeLimitMs = clamp(Number(durationMinutes) || 2, 1, 10) * 60000;
     state.timeLeftMs = state.timeLimitMs;
     state.scoreLimit = clamp(Number(scoreLimit) || 30, 1, 100);
+    state.brickRespawnIntervalMs = clamp(
+      Number(multiballIntervalSeconds) || C.BRICK_RESPAWN_MS / 1000,
+      C.BRICK_RESPAWN_MS / 1000,
+      C.MAX_BRICK_RESPAWN_MS / 1000
+    ) * 1000;
     state.emptyMs = 0;
     state.bricksRespawnMs = 0;
     state.nextBallId = 1;
@@ -334,7 +361,8 @@
   }
 
   function addParticles(state, x, y, color, count, random) {
-    for (let i = 0; i < count; i++) {
+    const particleCount = Math.min(count, Math.max(0, C.MAX_PARTICLES - state.particles.length));
+    for (let i = 0; i < particleCount; i++) {
       const angle = random() * Math.PI * 2;
       const speed = randomRange(1, 4.2, random);
       state.particles.push({
@@ -393,7 +421,9 @@
     addParticles(state, brick.x + brick.width / 2, brick.y + brick.height / 2, brick.special ? '#c786ff' : ball.ownerColor, C.PARTICLE_COUNT, random);
     if (brick.special) {
       const baseAngle = random() * Math.PI * 2;
-      for (let i = 0; i < C.MULTIBALL_COUNT; i++) {
+      const availableSlots = Math.max(0, C.MAX_ACTIVE_BALLS - state.balls.length - spawnedBalls.length);
+      const spawnCount = Math.min(C.MULTIBALL_COUNT - 1, availableSlots);
+      for (let i = 0; i < spawnCount; i++) {
         const angle = baseAngle + random() * Math.PI * 2;
         const speed = randomRange(3.2, 5.1, random);
         spawnedBalls.push(makeBall(
@@ -408,7 +438,7 @@
         ));
       }
     }
-    if (state.bricks.length === 0) state.bricksRespawnMs = C.BRICK_RESPAWN_MS;
+    if (state.bricks.length === 0) state.bricksRespawnMs = state.brickRespawnIntervalMs;
   }
 
   function updatePaddles(state, inputs, dt, random) {
@@ -456,7 +486,7 @@
     const spawnedBalls = [];
     state.balls.forEach(ball => {
       ball.trail.unshift({ x: ball.x, y: ball.y });
-      if (ball.trail.length > 9) ball.trail.length = 9;
+      if (ball.trail.length > C.BALL_TRAIL_LENGTH) ball.trail.length = C.BALL_TRAIL_LENGTH;
       ball.x += ball.vx * dt;
       ball.y += ball.vy * dt;
 
@@ -468,7 +498,12 @@
         ball.y += collision.ny * Math.max(collision.overlap, 0.1);
         reflect(ball, collision.nx, collision.ny);
         boostBall(ball, 1.012);
-        breakBrick(state, ball, brick, rand, spawnedBalls);
+        if (brick.special && brick.hitsRemaining > 1) {
+          brick.hitsRemaining -= 1;
+          addParticles(state, ball.x, ball.y, '#c786ff', 4, rand);
+        } else {
+          breakBrick(state, ball, brick, rand, spawnedBalls);
+        }
         hitBrick = true;
         break;
       }

@@ -72,6 +72,12 @@
       if (message.type === 'input' && playerIndex !== null && handlers.onInput) {
         const move = Number(message.move);
         handlers.onInput(playerIndex, Number.isFinite(move) ? Math.max(-1, Math.min(1, move)) : 0);
+        return;
+      }
+      if (message.type === 'color' && playerIndex !== null && handlers.onColor) {
+        const accepted = handlers.onColor(playerIndex, String(message.color || ''));
+        if (!accepted) connection.send({ type: 'colorRejected', reason: 'Essa cor já está escolhida por outro jogador.' });
+        else if (handlers.onLobbyChange) handlers.onLobbyChange();
       }
     });
     connection.on('close', () => {
@@ -113,6 +119,7 @@
             if (handlers.onWelcome) handlers.onWelcome(message.playerIndex);
             resolve(message.playerIndex);
           } else if (message.type === 'state' && handlers.onState) handlers.onState(message.state);
+          else if (message.type === 'colorRejected' && handlers.onColorRejected) handlers.onColorRejected(message.reason);
           else if (message.type === 'rejected' && !settled) {
             clearTimeout(timeout);
             settled = true;
@@ -149,6 +156,10 @@
 
   function sendInput(move) {
     if (!host && hostConnection && hostConnection.open) hostConnection.send({ type: 'input', move });
+  }
+
+  function sendColor(color) {
+    if (!host && hostConnection && hostConnection.open) hostConnection.send({ type: 'color', color });
   }
 
   function broadcastState(state) {
@@ -198,5 +209,5 @@
     }
   }
 
-  window.QB.Network = Object.freeze({ createHost, joinRoom, sendInput, broadcastState, getRoomId, leave });
+  window.QB.Network = Object.freeze({ createHost, joinRoom, sendInput, sendColor, broadcastState, getRoomId, leave });
 })();
