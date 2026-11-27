@@ -298,6 +298,22 @@ wallBounceBot.bricks = [];
 wallBounceBot.balls = [{ id: 1, x: 317.5, y: 600, vx: -5, vy: 8, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
 assert.equal(AI.getMove(wallBounceBot, wallBounceBot.players[0], sequenceRandom([0.1, 0.5, 0.5, 0.5])), 1, 'two-player bots account for wall bounces when aiming');
 
+const cornerDefense = createPlayingState(4);
+cornerDefense.bricks = [];
+cornerDefense.players[1].botDifficulty = 3;
+cornerDefense.players[3].botDifficulty = 3;
+cornerDefense.balls = [{ id: 1, x: 580, y: 220, vx: 4, vy: -4, radius: C.BALL_RADIUS, ownerColor: C.COLORS.red, ownerIndex: 0, isMain: true, trail: [] }];
+const centeredAim = () => sequenceRandom([0.1, 0.5, 0.5, 0.5, 0.5]);
+assert.equal(AI.getMove(cornerDefense, cornerDefense.players[1], centeredAim()), 1, 'north bot tracks a ball near the northeast corner');
+assert.equal(AI.getMove(cornerDefense, cornerDefense.players[3], centeredAim()), -1, 'east bot can cover the same corner approach');
+cornerDefense.players[1].position = 1;
+cornerDefense.players[3].position = 0;
+cornerDefense.balls[0].x = 608;
+cornerDefense.balls[0].y = 192;
+cornerDefense.elapsedMs = 7 * 1000 / 60;
+assert.equal(AI.getMove(cornerDefense, cornerDefense.players[1], stableRandom), 0, 'north bot holds its corner defense after the predicted paddle plane');
+assert.equal(AI.getMove(cornerDefense, cornerDefense.players[3], stableRandom), 0, 'east bot does not retreat before the ball reaches the corner');
+
 function makeEmptyPowerupState() {
   const state = createPlayingState(2);
   state.balls = [];

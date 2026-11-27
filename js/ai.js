@@ -71,7 +71,7 @@
       const distance = (side.midpoint.x - ball.x) * side.outward.x +
         (side.midpoint.y - ball.y) * side.outward.y - contactDistance;
       const speedOutward = ball.vx * side.outward.x + ball.vy * side.outward.y;
-      if (speedOutward <= 0 || distance < -ball.radius) return;
+      if (speedOutward <= 0 || distance < -(contactDistance + ball.radius)) return;
       const time = Math.max(0, distance / speedOutward);
       const targetX = ball.x + ball.vx * time;
       let targetY = ball.y + ball.vy * time;
@@ -81,7 +81,7 @@
       }
       const alongSide = (targetX - side.midpoint.x) * side.tangent.x + (targetY - side.midpoint.y) * side.tangent.y;
       if (Math.abs(alongSide) > side.length / 2 + ball.radius) return;
-      candidates.push({ ball, time, alongSide });
+      candidates.push({ ball, time, alongSide, distance });
     });
 
     candidates.sort((a, b) => a.time - b.time);
@@ -104,14 +104,16 @@
     }
 
     if (plan.mode === 'intercept' && focused) {
-      plan.aimPosition = clamp(0.5 + (focused.alongSide - plan.contactOffset + plan.aimError) / travel, 0, 1);
+      if (focused.distance > 0) {
+        plan.aimPosition = clamp(0.5 + (focused.alongSide - plan.contactOffset + plan.aimError) / travel, 0, 1);
+      }
       const contactMargin = Math.max(0, paddleLength / 2 + focused.ball.radius -
         Math.abs(plan.contactOffset) - Math.abs(plan.aimError));
       const safeRadius = Math.min(profile.interceptRadius, contactMargin / travel * 0.7);
       const commitment = clamp(focused.time / profile.commitFrames, 0, 1);
       const radius = safeRadius * commitment * commitment;
       const wander = Math.sin(now / plan.wanderPeriodMs * Math.PI * 2 + plan.wanderPhase) * radius;
-      plan.targetPosition = clamp(plan.aimPosition + wander, 0.04, 0.96);
+      plan.targetPosition = clamp(plan.aimPosition + wander, 0, 1);
     }
 
     const delta = plan.targetPosition - player.position;
