@@ -21,8 +21,6 @@
     PADDLE_MAX_ANGLE: Math.PI / 3,
     ARENA_RADIUS: 350,
     TWO_PLAYER_BOUNDS: Object.freeze({ left: 70, right: 730, top: 180, bottom: 620 }),
-    BRICK_COLUMNS: 5,
-    BRICK_ROWS: 5,
     BRICK_WIDTH: 38,
     BRICK_HEIGHT: 23,
     BRICK_GAP: 7,

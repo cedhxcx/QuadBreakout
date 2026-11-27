@@ -116,9 +116,8 @@
     const respawnTimer = el('brickRespawnTimer');
     if (state.bricks.length === 0 && state.bricksRespawnMs > 0) {
       respawnTimer.textContent = `Blocos reaparecem em ${Math.ceil(state.bricksRespawnMs / 1000)}s`;
-      respawnTimer.hidden = false;
     } else {
-      respawnTimer.hidden = true;
+      respawnTimer.textContent = '';
     }
     el('gameHint').textContent = state.balls.length > 1
       ? `${state.balls.length} bolas em jogo • Destrua blocos roxos para espalhar multibolas.`

@@ -49,7 +49,6 @@
       balls: [],
       powerup: null,
       powerupSpawnMs: null,
-      powerupSpawned: false,
       bricks: [],
       particles: [],
       elapsedMs: 0,
@@ -167,45 +166,60 @@
     const scale = Math.min(1, apothem / 220);
     const brickWidth = C.BRICK_WIDTH * scale;
     const brickHeight = C.BRICK_HEIGHT * scale;
-    const gap = C.BRICK_GAP * scale;
-    const gridWidth = C.BRICK_COLUMNS * brickWidth + (C.BRICK_COLUMNS - 1) * gap;
-    const gridHeight = C.BRICK_ROWS * brickHeight + (C.BRICK_ROWS - 1) * gap;
-    const startX = (C.WIDTH - gridWidth) / 2;
-    const startY = (C.HEIGHT - gridHeight) / 2;
-    const cells = [];
-    for (let row = 0; row < C.BRICK_ROWS; row++) {
-      for (let column = 0; column < C.BRICK_COLUMNS; column++) {
-        const cell = {
-          id: row * C.BRICK_COLUMNS + column,
-          x: startX + column * (brickWidth + gap),
-          y: startY + row * (brickHeight + gap),
-          width: brickWidth,
-          height: brickHeight
-        };
-        if (!avoidCircle || !circleRect(avoidCircle, cell).hit) cells.push(cell);
-      }
+    const brickCount =
+      C.MULTIBALL_BRICKS_MIN + Math.floor(rand() * (C.MULTIBALL_BRICKS_MAX - C.MULTIBALL_BRICKS_MIN + 1));
+    const quadrants = [0, 1, 2, 3];
+    for (let index = quadrants.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(rand() * (index + 1));
+      [quadrants[index], quadrants[swapIndex]] = [quadrants[swapIndex], quadrants[index]];
     }
 
-    const specialCount = Math.min(
-      cells.length,
-      C.MULTIBALL_BRICKS_MIN + Math.floor(rand() * (C.MULTIBALL_BRICKS_MAX - C.MULTIBALL_BRICKS_MIN + 1))
-    );
-    const specialIndices = Array.from({ length: cells.length }, (_, index) => index);
-    for (let index = cells.length - 1; index > 0; index--) {
-      const swapIndex = Math.min(index, Math.floor(rand() * (index + 1)));
-      [specialIndices[index], specialIndices[swapIndex]] = [specialIndices[swapIndex], specialIndices[index]];
+    const offsets = [38, 58, 78, 98].flatMap(x => [38, 58, 78, 98].map(y => ({ x, y })));
+    for (let index = offsets.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(rand() * (index + 1));
+      [offsets[index], offsets[swapIndex]] = [offsets[swapIndex], offsets[index]];
     }
-    const specialBricks = new Set(specialIndices.slice(0, specialCount));
-    return cells.map((cell, index) => {
-      const special = specialBricks.has(index);
-      return {
-        ...cell,
-        special,
-        hitsRemaining: special
-          ? C.MULTIBALL_HITS_MIN + Math.floor(rand() * (C.MULTIBALL_HITS_MAX - C.MULTIBALL_HITS_MIN + 1))
-          : 1
-      };
-    });
+
+    const bricks = [];
+    const usedQuadrants = new Set();
+    for (let index = 0; index < brickCount; index++) {
+      let brick = null;
+      for (const quadrant of quadrants) {
+        if (usedQuadrants.has(quadrant)) continue;
+        const signX = quadrant % 2 === 0 ? -1 : 1;
+        const signY = quadrant < 2 ? -1 : 1;
+        const candidate = offsets.find(offset => {
+          const rect = {
+            x: C.WIDTH / 2 + signX * offset.x - brickWidth / 2,
+            y: C.HEIGHT / 2 + signY * offset.y - brickHeight / 2,
+            width: brickWidth,
+            height: brickHeight
+          };
+          return (!avoidCircle || !circleRect(avoidCircle, rect).hit) &&
+            !bricks.some(existing =>
+              rect.x < existing.x + existing.width + C.BRICK_GAP &&
+              rect.x + rect.width + C.BRICK_GAP > existing.x &&
+              rect.y < existing.y + existing.height + C.BRICK_GAP &&
+              rect.y + rect.height + C.BRICK_GAP > existing.y
+            );
+        });
+        if (!candidate) continue;
+        brick = {
+          id: index,
+          x: C.WIDTH / 2 + signX * candidate.x - brickWidth / 2,
+          y: C.HEIGHT / 2 + signY * candidate.y - brickHeight / 2,
+          width: brickWidth,
+          height: brickHeight,
+          special: true,
+          hitsRemaining: C.MULTIBALL_HITS_MIN + Math.floor(rand() * (C.MULTIBALL_HITS_MAX - C.MULTIBALL_HITS_MIN + 1))
+        };
+        usedQuadrants.add(quadrant);
+        break;
+      }
+      if (!brick) throw new Error('Não foi possível posicionar os blocos multiball sem sobreposição.');
+      bricks.push(brick);
+    }
+    return bricks;
   }
 
   function makeBall(x, y, color, ownerIndex, isMain, angle, speed, id) {
@@ -250,8 +264,7 @@
     state.emptyMs = 0;
     state.bricksRespawnMs = 0;
     state.powerup = null;
-    state.powerupSpawnMs = null;
-    state.powerupSpawned = false;
+    state.powerupSpawnMs = C.POWERUP_INITIAL_DELAY_MS;
     state.nextBallId = 1;
     state.winnerIndex = null;
     state.isDraw = false;
@@ -396,20 +409,25 @@
     }
   }
 
-  function makePowerup(random) {
+  function makePowerup(random, bricks) {
     const spread = C.POWERUP_CENTER_SPREAD;
-    return {
+    const powerup = {
       type: random() < 0.5 ? 'ice' : 'fire',
-      x: C.WIDTH / 2 + randomRange(-spread, spread, random),
-      y: C.HEIGHT / 2 + randomRange(-spread, spread, random),
       radius: C.BALL_RADIUS * C.POWERUP_SIZE_MULTIPLIER
     };
+    for (let attempt = 0; attempt < 64; attempt++) {
+      powerup.x = C.WIDTH / 2 + randomRange(-spread, spread, random);
+      powerup.y = C.HEIGHT / 2 + randomRange(-spread, spread, random);
+      if (!bricks.some(brick => circleRect(powerup, brick).hit)) return powerup;
+    }
+    return null;
   }
 
   function spawnPowerupIfReady(state, random) {
-    if (state.powerup || state.powerupSpawnMs !== 0 || state.bricks.length > 0) return;
-    state.powerup = makePowerup(random);
-    state.powerupSpawned = true;
+    if (state.powerup || state.powerupSpawnMs !== 0) return;
+    const powerup = makePowerup(random, state.bricks);
+    if (!powerup) return;
+    state.powerup = powerup;
     state.powerupSpawnMs = null;
   }
 
@@ -613,9 +631,6 @@
     });
 
     if (state.bricks.length === 0) {
-      if (!state.powerupSpawned && state.powerupSpawnMs === null) {
-        state.powerupSpawnMs = C.POWERUP_INITIAL_DELAY_MS;
-      }
       state.bricksRespawnMs = Math.max(0, state.bricksRespawnMs - elapsedMs);
       if (state.bricksRespawnMs === 0) state.bricks = makeBricks(rand, state.playerCount, state.powerup);
     }

@@ -35,6 +35,15 @@ assert.ok(fourPlayerArena.sides[3].midpoint.x > C.WIDTH / 2, 'yellow side should
 
 for (let playerCount = 2; playerCount <= 8; playerCount++) {
   const state = createPlayingState(playerCount);
+  assert.ok(state.bricks.length >= 1 && state.bricks.length <= 2, `the ${playerCount}-player arena has at most two multiball bricks`);
+  assert.ok(state.bricks.every(brick => brick.special), 'normal bricks are absent for every arena size');
+  assert.equal(new Set(state.bricks.map(brick =>
+    `${Math.sign(brick.x + brick.width / 2 - C.WIDTH / 2)},${Math.sign(brick.y + brick.height / 2 - C.HEIGHT / 2)}`
+  )).size, state.bricks.length, 'multiball bricks occupy separate quadrants');
+  state.bricks.forEach(brick => {
+    assert.ok(Math.abs(brick.x + brick.width / 2 - C.WIDTH / 2) <= 100);
+    assert.ok(Math.abs(brick.y + brick.height / 2 - C.HEIGHT / 2) <= 100);
+  });
   const side = Physics.getSideGeometry(playerCount, 0);
   const paddle = Physics.paddleRect(state.players[0], playerCount);
   state.bricks = [];
@@ -69,13 +78,16 @@ assert.equal(lobby.players.length, 8);
 const twoPlayerState = createPlayingState(2);
 assert.equal(twoPlayerState.players[1].bot, true, 'vacant seats become bots at match start');
 assert.equal(twoPlayerState.balls[0].ownerColor, C.COLORS.neutral);
-assert.equal(twoPlayerState.bricks.filter(brick => brick.special).length, 2, 'the initial grid should contain only one or two special bricks');
+assert.equal(twoPlayerState.bricks.filter(brick => brick.special).length, 2, 'the initial arena should contain only special multiball bricks');
+assert.ok(twoPlayerState.bricks.length >= 1 && twoPlayerState.bricks.length <= 2, 'the arena should only contain one or two multiball bricks');
+assert.ok(twoPlayerState.bricks.every(brick => brick.special), 'normal bricks are no longer generated');
+assert.equal(new Set(twoPlayerState.bricks.map(brick => Math.sign(brick.x + brick.width / 2 - C.WIDTH / 2) + ',' + Math.sign(brick.y + brick.height / 2 - C.HEIGHT / 2))).size, twoPlayerState.bricks.length, 'multiball bricks are placed in separate quadrants');
 assert.ok(twoPlayerState.bricks.filter(brick => brick.special).every(brick =>
   brick.hitsRemaining >= C.MULTIBALL_HITS_MIN && brick.hitsRemaining <= C.MULTIBALL_HITS_MAX
 ), 'special bricks require two or three hits');
-assert.equal(twoPlayerState.bricks.length, C.BRICK_COLUMNS * C.BRICK_ROWS);
+assert.ok(twoPlayerState.bricks.every(brick => Math.abs(brick.x + brick.width / 2 - C.WIDTH / 2) <= 100), 'multiball bricks stay close to the center');
 assert.equal(C.PADDLE_LENGTH, 100, 'paddles should use the more compact size');
-assert.equal(Physics.makeBricks(() => 0, 2).filter(brick => brick.special).length, 1, 'a generated grid can have one special brick');
+assert.equal(Physics.makeBricks(() => 0, 2).length, 1, 'the arena can generate a single multiball brick');
 
 const customRespawn = Physics.createLobbyState('Host', 'host', 2);
 Physics.startMatch(customRespawn, 2, 30, stableRandom, 45);
@@ -129,7 +141,7 @@ assert.ok(delayedBricks.bricksRespawnMs > C.BRICK_RESPAWN_MS - 100, 'the countdo
 Physics.step(delayedBricks, C.BRICK_RESPAWN_MS - 100, {}, stableRandom);
 assert.equal(delayedBricks.bricks.length, 0, 'bricks should not return before the configured interval');
 Physics.step(delayedBricks, 100, {}, stableRandom);
-assert.equal(delayedBricks.bricks.length, C.BRICK_COLUMNS * C.BRICK_ROWS, 'the next brick grid returns when the interval expires');
+assert.ok(delayedBricks.bricks.length >= 1 && delayedBricks.bricks.length <= 2, 'only multiball bricks return when the interval expires');
 
 const multiball = createPlayingState(3);
 multiball.bricks = [{ id: 1, x: 380, y: 390, width: 40, height: 20, special: true, hitsRemaining: 3 }];
@@ -184,7 +196,7 @@ brickRespawn.bricks = [];
 brickRespawn.bricksRespawnMs = 10;
 brickRespawn.balls = [];
 Physics.step(brickRespawn, 20, {}, stableRandom);
-assert.equal(brickRespawn.bricks.length, C.BRICK_COLUMNS * C.BRICK_ROWS);
+assert.ok(brickRespawn.bricks.length >= 1 && brickRespawn.bricks.length <= 2);
 
 const winner = createPlayingState(8);
 winner.scoreLimit = 1;
@@ -233,11 +245,10 @@ function makeEmptyPowerupState() {
 }
 
 const powerupState = makeEmptyPowerupState();
-Physics.step(powerupState, 1, {}, stableRandom);
-assert.equal(powerupState.powerup, null, 'the first power-up waits after all bricks have been cleared');
 assert.equal(powerupState.powerupSpawnMs, C.POWERUP_INITIAL_DELAY_MS);
 Physics.step(powerupState, C.POWERUP_INITIAL_DELAY_MS - 1, {}, stableRandom);
-assert.equal(powerupState.powerup, null, 'the initial power-up delay is three seconds');
+assert.equal(powerupState.powerup, null, 'the first power-up waits for its three-second timer');
+assert.equal(powerupState.powerupSpawnMs, 1);
 Physics.step(powerupState, 1, {}, stableRandom);
 assert.equal(powerupState.powerup.type, 'fire', 'the power-up type is selected randomly');
 assert.equal(powerupState.powerup.radius, C.BALL_RADIUS * 1.5);
@@ -275,7 +286,7 @@ assert.ok(powerupState.powerup, 'another power-up appears after the respawn inte
 
 const centerPowerup = { type: 'ice', x: C.WIDTH / 2, y: C.HEIGHT / 2, radius: C.BALL_RADIUS * 1.5 };
 const bricksAroundPowerup = Physics.makeBricks(stableRandom, 4, centerPowerup);
-assert.ok(bricksAroundPowerup.length < C.BRICK_COLUMNS * C.BRICK_ROWS, 'brick grids leave the active power-up area clear');
+assert.ok(bricksAroundPowerup.length <= 2, 'multiball bricks leave the active power-up area clear');
 bricksAroundPowerup.forEach(brick => {
   const closestX = Math.max(brick.x, Math.min(centerPowerup.x, brick.x + brick.width));
   const closestY = Math.max(brick.y, Math.min(centerPowerup.y, brick.y + brick.height));
@@ -283,7 +294,6 @@ bricksAroundPowerup.forEach(brick => {
 });
 const powerupDuringBrickRespawn = makeEmptyPowerupState();
 powerupDuringBrickRespawn.powerup = centerPowerup;
-powerupDuringBrickRespawn.powerupSpawned = true;
 powerupDuringBrickRespawn.bricksRespawnMs = 1;
 Physics.step(powerupDuringBrickRespawn, 1, {}, stableRandom);
 assert.ok(powerupDuringBrickRespawn.bricks.length > 0, 'bricks still respawn while an uncollected power-up is active');
@@ -291,6 +301,16 @@ powerupDuringBrickRespawn.bricks.forEach(brick => {
   const closestX = Math.max(brick.x, Math.min(centerPowerup.x, brick.x + brick.width));
   const closestY = Math.max(brick.y, Math.min(centerPowerup.y, brick.y + brick.height));
   assert.ok((closestX - centerPowerup.x) ** 2 + (closestY - centerPowerup.y) ** 2 > centerPowerup.radius ** 2);
+});
+const powerupWithBricks = createPlayingState(4);
+powerupWithBricks.powerupSpawnMs = 0;
+Physics.step(powerupWithBricks, 0, {}, stableRandom);
+assert.ok(powerupWithBricks.powerup, 'power-ups can spawn while multiball bricks remain');
+assert.ok(powerupWithBricks.bricks.length > 0, 'spawning a power-up does not remove multiball bricks');
+powerupWithBricks.bricks.forEach(brick => {
+  const closestX = Math.max(brick.x, Math.min(powerupWithBricks.powerup.x, brick.x + brick.width));
+  const closestY = Math.max(brick.y, Math.min(powerupWithBricks.powerup.y, brick.y + brick.height));
+  assert.ok((closestX - powerupWithBricks.powerup.x) ** 2 + (closestY - powerupWithBricks.powerup.y) ** 2 > powerupWithBricks.powerup.radius ** 2);
 });
 
 function makePowerupPaddleHit(type) {
