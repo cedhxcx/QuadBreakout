@@ -4,17 +4,23 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const randomRange = (min, max, random) => min + (max - min) * random();
   const profiles = {
-    1: { reactionFrames: 20, roamRadius: 0.42, minShift: 0.14, aimError: 0.2, roamMinMs: 500, roamMaxMs: 950, interceptRadius: 0.12, interceptMinShift: 0.06, interceptMoveMinMs: 220, interceptMoveMaxMs: 360 },
-    2: { reactionFrames: 42, roamRadius: 0.3, minShift: 0.11, aimError: 0.1, roamMinMs: 700, roamMaxMs: 1200, interceptRadius: 0.09, interceptMinShift: 0.05, interceptMoveMinMs: 250, interceptMoveMaxMs: 400 },
-    3: { reactionFrames: 72, roamRadius: 0.2, minShift: 0.08, aimError: 0.04, roamMinMs: 850, roamMaxMs: 1400, interceptRadius: 0.065, interceptMinShift: 0.04, interceptMoveMinMs: 300, interceptMoveMaxMs: 500 }
+    1: { reactionFrames: 40, roamRadius: 0.42, minShift: 0.14, aimError: 0.06, maxImpactOffset: 0.5, roamMinMs: 500, roamMaxMs: 950, interceptRadius: 0.06, interceptMinShift: 0.04, interceptMoveMinMs: 220, interceptMoveMaxMs: 360 },
+    2: { reactionFrames: 54, roamRadius: 0.3, minShift: 0.11, aimError: 0.04, maxImpactOffset: 0.65, roamMinMs: 700, roamMaxMs: 1200, interceptRadius: 0.05, interceptMinShift: 0.035, interceptMoveMinMs: 250, interceptMoveMaxMs: 400 },
+    3: { reactionFrames: 72, roamRadius: 0.2, minShift: 0.08, aimError: 0.02, maxImpactOffset: 0.75, roamMinMs: 850, roamMaxMs: 1400, interceptRadius: 0.045, interceptMinShift: 0.03, interceptMoveMinMs: 300, interceptMoveMaxMs: 500 }
   };
 
-  function chooseImpactOffset(random) {
+  function chooseImpactOffset(random, profile) {
     const style = random();
-    if (style < 0.18) return (random() - 0.5) * 0.36;
+    if (style < 0.3) return (random() - 0.5) * 0.5;
     const direction = random() < 0.5 ? -1 : 1;
-    const strength = style < 0.72 ? 0.62 + random() * 0.3 : 0.28 + random() * 0.45;
+    const strength = 0.3 + random() * (profile.maxImpactOffset - 0.3);
     return direction * strength;
+  }
+
+  function reflectInRange(position, min, max) {
+    const span = max - min;
+    const folded = ((position - min) % (span * 2) + span * 2) % (span * 2);
+    return min + (folded <= span ? folded : span * 2 - folded);
   }
 
   function makePlan(state, candidate, player, profile, paddleLength, travel, random) {
@@ -34,7 +40,7 @@
       };
     }
 
-    const contactOffset = chooseImpactOffset(random) * paddleLength / 2;
+    const contactOffset = chooseImpactOffset(random, profile) * paddleLength / 2;
     const aimError = (random() * 2 - 1) * travel * profile.aimError;
     const aimPosition = clamp(0.5 + (candidate.alongSide - contactOffset + aimError) / travel, 0, 1);
     return {
@@ -60,13 +66,20 @@
     const candidates = [];
 
     state.balls.forEach(ball => {
-      const distance = (side.midpoint.x - ball.x) * side.outward.x + (side.midpoint.y - ball.y) * side.outward.y;
+      const contactDistance = C.PADDLE_INSET + C.PADDLE_THICKNESS / 2 + ball.radius;
+      const distance = (side.midpoint.x - ball.x) * side.outward.x +
+        (side.midpoint.y - ball.y) * side.outward.y - contactDistance;
       const speedOutward = ball.vx * side.outward.x + ball.vy * side.outward.y;
       if (speedOutward <= 0 || distance < -ball.radius) return;
       const time = Math.max(0, distance / speedOutward);
       const targetX = ball.x + ball.vx * time;
-      const targetY = ball.y + ball.vy * time;
+      let targetY = ball.y + ball.vy * time;
+      if (state.playerCount === 2) {
+        const bounds = C.TWO_PLAYER_BOUNDS;
+        targetY = reflectInRange(targetY, bounds.top + ball.radius, bounds.bottom - ball.radius);
+      }
       const alongSide = (targetX - side.midpoint.x) * side.tangent.x + (targetY - side.midpoint.y) * side.tangent.y;
+      if (Math.abs(alongSide) > side.length / 2 + ball.radius) return;
       candidates.push({ ball, time, alongSide });
     });
 
@@ -93,13 +106,17 @@
       plan.aimPosition = clamp(0.5 + (focused.alongSide - plan.contactOffset + plan.aimError) / travel, 0, 1);
       if (now >= plan.nextMoveAt || (plan.hasWandered && Math.abs(plan.targetPosition - player.position) < 0.02)) {
         const urgency = clamp(focused.time / profile.reactionFrames, 0.25, 1);
-        const radius = profile.interceptRadius * (0.55 + urgency * 0.45);
+        const contactMargin = Math.max(0, paddleLength / 2 + focused.ball.radius -
+          Math.abs(plan.contactOffset) - Math.abs(plan.aimError));
+        const safeRadius = Math.min(profile.interceptRadius, contactMargin / travel * 0.7);
+        const radius = safeRadius * (0.55 + urgency * 0.45);
         const minPosition = clamp(plan.aimPosition - radius, 0.04, 0.96);
         const maxPosition = clamp(plan.aimPosition + radius, 0.04, 0.96);
         let targetPosition = clamp(plan.aimPosition + (rand() * 2 - 1) * radius, minPosition, maxPosition);
-        if (Math.abs(targetPosition - player.position) < profile.interceptMinShift) {
+        const minShift = Math.min(profile.interceptMinShift, radius * 0.8);
+        if (Math.abs(targetPosition - player.position) < minShift) {
           const direction = rand() < 0.5 ? -1 : 1;
-          targetPosition = clamp(player.position + direction * profile.interceptMinShift, minPosition, maxPosition);
+          targetPosition = clamp(player.position + direction * minShift, minPosition, maxPosition);
         }
         plan.targetPosition = targetPosition;
         plan.nextMoveAt = now + randomRange(profile.interceptMoveMinMs, profile.interceptMoveMaxMs, rand);

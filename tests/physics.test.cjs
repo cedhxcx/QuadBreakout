@@ -223,7 +223,7 @@ assert.equal(AI.getMove(botState, botState.players[0]), -1, 'left-side bot track
 function makeBotStrikeState() {
   const state = createPlayingState(2);
   state.players[0].bot = true;
-  state.balls = [{ id: 1, x: 100, y: 400, vx: -4, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
+  state.balls = [{ id: 1, x: 160, y: 400, vx: -4, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
   return state;
 }
 
@@ -246,18 +246,20 @@ leftPatrol.players[0].bot = true;
 leftPatrol.balls = [{ id: 1, x: 400, y: 400, vx: 0, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
 assert.equal(AI.getMove(leftPatrol, leftPatrol.players[0], () => 0.1), -1, 'bots patrol instead of remaining centered when no ball is approaching');
 
-function makeDifficultyThreat(difficulty) {
+function makeDifficultyThreat(difficulty, x) {
   const state = createPlayingState(2);
   state.players[0].bot = true;
   state.players[0].botDifficulty = difficulty;
-  state.balls = [{ id: 1, x: 200, y: 400, vx: -5, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
+  state.balls = [{ id: 1, x: x || 200, y: 400, vx: -5, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
   return state;
 }
 
-const roamingBot = makeDifficultyThreat(1);
+const roamingBot = makeDifficultyThreat(1, 400);
 assert.equal(AI.getMove(roamingBot, roamingBot.players[0], () => 0.99), 1, 'low-difficulty bots reposition while the ball is still distant');
 roamingBot.elapsedMs = 1000;
 assert.equal(AI.getMove(roamingBot, roamingBot.players[0], () => 0.01), -1, 'roaming bots choose a new movement direction over time');
+const assertiveLowLevelBot = makeDifficultyThreat(1, 293);
+assert.equal(AI.getMove(assertiveLowLevelBot, assertiveLowLevelBot.players[0], sequenceRandom([0.1, 0.5, 0.5, 0.5])), 0, 'low-difficulty bots still make accurate intercepts with time to react');
 const reactingBot = makeDifficultyThreat(3);
 assert.equal(AI.getMove(reactingBot, reactingBot.players[0], sequenceRandom([0.5, 0.9, 0.5, 0.5])), -1, 'high-difficulty bots react earlier to an incoming ball');
 
@@ -268,6 +270,11 @@ assert.equal(AI.getMove(movingInterceptBot, movingInterceptBot.players[0], () =>
 movingInterceptBot.players[0].position = 0.54;
 movingInterceptBot.elapsedMs = 450;
 assert.equal(AI.getMove(movingInterceptBot, movingInterceptBot.players[0], () => 0.01), -1, 'bots keep moving around the intercept point instead of stopping there');
+
+const wallBounceBot = makeDifficultyThreat(3);
+wallBounceBot.bricks = [];
+wallBounceBot.balls = [{ id: 1, x: 317.5, y: 600, vx: -5, vy: 8, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
+assert.equal(AI.getMove(wallBounceBot, wallBounceBot.players[0], sequenceRandom([0.1, 0.5, 0.5, 0.5])), 1, 'two-player bots account for wall bounces when aiming');
 
 function makeEmptyPowerupState() {
   const state = createPlayingState(2);
