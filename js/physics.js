@@ -32,7 +32,9 @@
       bot: false,
       score: 0,
       position: 0.5,
-      move: 0
+      move: 0,
+      powerEffect: null,
+      powerEffectMs: 0
     };
   }
 
@@ -45,6 +47,9 @@
       playerCount: count,
       players,
       balls: [],
+      powerup: null,
+      powerupSpawnMs: null,
+      powerupSpawned: false,
       bricks: [],
       particles: [],
       elapsedMs: 0,
@@ -155,7 +160,7 @@
     return getArenaGeometry(playerCount).sides[playerIndex];
   }
 
-  function makeBricks(random, playerCount) {
+  function makeBricks(random, playerCount, avoidCircle) {
     const rand = random || Math.random;
     const count = clamp(Number(playerCount) || 4, 2, 8);
     const apothem = count === 2 ? 300 : C.ARENA_RADIUS * Math.cos(Math.PI / count);
@@ -167,33 +172,40 @@
     const gridHeight = C.BRICK_ROWS * brickHeight + (C.BRICK_ROWS - 1) * gap;
     const startX = (C.WIDTH - gridWidth) / 2;
     const startY = (C.HEIGHT - gridHeight) / 2;
-    const brickCount = C.BRICK_COLUMNS * C.BRICK_ROWS;
-    const specialCount = C.MULTIBALL_BRICKS_MIN + Math.floor(rand() * (C.MULTIBALL_BRICKS_MAX - C.MULTIBALL_BRICKS_MIN + 1));
-    const specialIndices = Array.from({ length: brickCount }, (_, index) => index);
-    for (let index = brickCount - 1; index > 0; index--) {
+    const cells = [];
+    for (let row = 0; row < C.BRICK_ROWS; row++) {
+      for (let column = 0; column < C.BRICK_COLUMNS; column++) {
+        const cell = {
+          id: row * C.BRICK_COLUMNS + column,
+          x: startX + column * (brickWidth + gap),
+          y: startY + row * (brickHeight + gap),
+          width: brickWidth,
+          height: brickHeight
+        };
+        if (!avoidCircle || !circleRect(avoidCircle, cell).hit) cells.push(cell);
+      }
+    }
+
+    const specialCount = Math.min(
+      cells.length,
+      C.MULTIBALL_BRICKS_MIN + Math.floor(rand() * (C.MULTIBALL_BRICKS_MAX - C.MULTIBALL_BRICKS_MIN + 1))
+    );
+    const specialIndices = Array.from({ length: cells.length }, (_, index) => index);
+    for (let index = cells.length - 1; index > 0; index--) {
       const swapIndex = Math.min(index, Math.floor(rand() * (index + 1)));
       [specialIndices[index], specialIndices[swapIndex]] = [specialIndices[swapIndex], specialIndices[index]];
     }
     const specialBricks = new Set(specialIndices.slice(0, specialCount));
-    const bricks = [];
-    let id = 0;
-    for (let row = 0; row < C.BRICK_ROWS; row++) {
-      for (let column = 0; column < C.BRICK_COLUMNS; column++) {
-        const special = specialBricks.has(id);
-        bricks.push({
-          id: id++,
-          x: startX + column * (brickWidth + gap),
-          y: startY + row * (brickHeight + gap),
-          width: brickWidth,
-          height: brickHeight,
-          special,
-          hitsRemaining: special
-            ? C.MULTIBALL_HITS_MIN + Math.floor(rand() * (C.MULTIBALL_HITS_MAX - C.MULTIBALL_HITS_MIN + 1))
-            : 1
-        });
-      }
-    }
-    return bricks;
+    return cells.map((cell, index) => {
+      const special = specialBricks.has(index);
+      return {
+        ...cell,
+        special,
+        hitsRemaining: special
+          ? C.MULTIBALL_HITS_MIN + Math.floor(rand() * (C.MULTIBALL_HITS_MAX - C.MULTIBALL_HITS_MIN + 1))
+          : 1
+      };
+    });
   }
 
   function makeBall(x, y, color, ownerIndex, isMain, angle, speed, id) {
@@ -207,6 +219,7 @@
       ownerColor: color,
       ownerIndex,
       isMain,
+      powerType: null,
       trail: []
     };
   }
@@ -221,6 +234,8 @@
       player.position = 0.5;
       player.score = 0;
       player.move = 0;
+      player.powerEffect = null;
+      player.powerEffectMs = 0;
     });
     state.phase = 'PLAYING';
     state.elapsedMs = 0;
@@ -234,6 +249,9 @@
     ) * 1000;
     state.emptyMs = 0;
     state.bricksRespawnMs = 0;
+    state.powerup = null;
+    state.powerupSpawnMs = null;
+    state.powerupSpawned = false;
     state.nextBallId = 1;
     state.winnerIndex = null;
     state.isDraw = false;
@@ -378,6 +396,57 @@
     }
   }
 
+  function makePowerup(random) {
+    const spread = C.POWERUP_CENTER_SPREAD;
+    return {
+      type: random() < 0.5 ? 'ice' : 'fire',
+      x: C.WIDTH / 2 + randomRange(-spread, spread, random),
+      y: C.HEIGHT / 2 + randomRange(-spread, spread, random),
+      radius: C.BALL_RADIUS * C.POWERUP_SIZE_MULTIPLIER
+    };
+  }
+
+  function spawnPowerupIfReady(state, random) {
+    if (state.powerup || state.powerupSpawnMs !== 0 || state.bricks.length > 0) return;
+    state.powerup = makePowerup(random);
+    state.powerupSpawned = true;
+    state.powerupSpawnMs = null;
+  }
+
+  function updatePowerups(state, elapsedMs, random) {
+    state.players.forEach(player => {
+      if (player.powerEffectMs <= 0) return;
+      player.powerEffectMs = Math.max(0, player.powerEffectMs - elapsedMs);
+      if (player.powerEffectMs === 0) player.powerEffect = null;
+    });
+
+    if (state.powerupSpawnMs !== null) {
+      state.powerupSpawnMs = Math.max(0, state.powerupSpawnMs - elapsedMs);
+      spawnPowerupIfReady(state, random);
+    }
+  }
+
+  function collectPowerup(state, ball, random) {
+    const powerup = state.powerup;
+    if (!powerup) return;
+    const dx = ball.x - powerup.x;
+    const dy = ball.y - powerup.y;
+    const radius = ball.radius + powerup.radius;
+    if (dx * dx + dy * dy > radius * radius) return;
+
+    ball.powerType = powerup.type;
+    addParticles(
+      state,
+      powerup.x,
+      powerup.y,
+      powerup.type === 'ice' ? C.POWERUP_ICE_COLOR : C.POWERUP_FIRE_COLOR,
+      C.PARTICLE_COUNT,
+      random
+    );
+    state.powerup = null;
+    state.powerupSpawnMs = C.POWERUP_RESPAWN_MS;
+  }
+
   function scoreGoal(state, ball, defenderIndex, random) {
     const defender = state.players[defenderIndex];
     if (ball.ownerIndex !== null && ball.ownerIndex !== undefined) {
@@ -410,6 +479,11 @@
     ball.vy = (inwardY * Math.cos(angle) + paddle.tangent.y * Math.sin(angle)) * speed;
     ball.ownerColor = player.color;
     ball.ownerIndex = player.index;
+    if (ball.powerType) {
+      player.powerEffect = ball.powerType;
+      player.powerEffectMs = C.POWERUP_DURATION_MS;
+      ball.powerType = null;
+    }
     ball.x += collision.nx * Math.max(0, collision.overlap);
     ball.y += collision.ny * Math.max(0, collision.overlap);
     return true;
@@ -452,7 +526,10 @@
       const side = arena.sides[player.index];
       const length = Math.min(C.PADDLE_LENGTH, side.length * 0.42);
       const maxOffset = Math.max(0, (side.length - length) / 2);
-      const offset = (player.position - 0.5) * 2 * maxOffset + player.move * C.PADDLE_SPEED * dt;
+      const speedMultiplier = player.powerEffect === 'ice'
+        ? C.POWERUP_ICE_SPEED
+        : player.powerEffect === 'fire' ? C.POWERUP_FIRE_SPEED : 1;
+      const offset = (player.position - 0.5) * 2 * maxOffset + player.move * C.PADDLE_SPEED * speedMultiplier * dt;
       player.position = maxOffset === 0 ? 0.5 : clamp((offset / maxOffset + 1) / 2, 0, 1);
     });
   }
@@ -480,6 +557,7 @@
     const dt = clamp(elapsedMs / (1000 / 60), 0, 2);
     state.elapsedMs += elapsedMs;
     state.timeLeftMs = Math.max(0, state.timeLeftMs - elapsedMs);
+    updatePowerups(state, elapsedMs, rand);
     updatePaddles(state, inputs, dt, rand);
 
     const remainingBalls = [];
@@ -489,6 +567,7 @@
       if (ball.trail.length > C.BALL_TRAIL_LENGTH) ball.trail.length = C.BALL_TRAIL_LENGTH;
       ball.x += ball.vx * dt;
       ball.y += ball.vy * dt;
+      collectPowerup(state, ball, rand);
 
       let hitBrick = false;
       for (const brick of state.bricks) {
@@ -534,9 +613,13 @@
     });
 
     if (state.bricks.length === 0) {
+      if (!state.powerupSpawned && state.powerupSpawnMs === null) {
+        state.powerupSpawnMs = C.POWERUP_INITIAL_DELAY_MS;
+      }
       state.bricksRespawnMs = Math.max(0, state.bricksRespawnMs - elapsedMs);
-      if (state.bricksRespawnMs === 0) state.bricks = makeBricks(rand, state.playerCount);
+      if (state.bricksRespawnMs === 0) state.bricks = makeBricks(rand, state.playerCount, state.powerup);
     }
+    spawnPowerupIfReady(state, rand);
 
     if (state.balls.length === 0) {
       state.emptyMs += elapsedMs;

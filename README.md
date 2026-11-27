@@ -21,6 +21,7 @@ O jogo não usa etapa de build nem dependências locais; PeerJS 1.5.4 é carrega
 - Rebater uma bola define sua cor como a do jogador. Fazer gol com bola adversária vale um ponto; gol contra remove um ponto, sem pontuação negativa. Bolas brancas são neutras.
 - A arena começa com 25 blocos e apenas 1 ou 2 blocos especiais. Os especiais precisam de 2 ou 3 impactos para liberar multibolas; a partida mantém no máximo 5 bolas simultâneas.
 - Quando todos os blocos acabam, o contador aparece acima da arena. Uma nova matriz surge após o intervalo configurado (30 segundos por padrão).
+- Depois que todos os blocos acabam, um power-up aleatório de gelo ou fogo surge no centro após 3 segundos. A bola que o coleta fica marcada com o efeito; ao rebater na barra, aplica lentidão (0,75×) ou aceleração (1,25×) por 8 segundos. O próximo power-up aparece 15 segundos após a coleta; se não for coletado, permanece no campo. Blocos reaparecem sem ocupar a posição de um power-up ativo.
 
 ## Publicar no GitHub Pages
 

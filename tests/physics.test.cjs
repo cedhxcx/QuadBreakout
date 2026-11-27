@@ -224,4 +224,129 @@ leftPatrol.players[0].bot = true;
 leftPatrol.balls = [{ id: 1, x: 400, y: 400, vx: 0, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
 assert.equal(AI.getMove(leftPatrol, leftPatrol.players[0], () => 0.1), -1, 'bots patrol instead of remaining centered when no ball is approaching');
 
-console.log('PASS: 2-8 player arenas, configurable respawn, multiball limits, particles, goals, bots, and match end.');
+function makeEmptyPowerupState() {
+  const state = createPlayingState(2);
+  state.balls = [];
+  state.bricks = [];
+  state.bricksRespawnMs = 30000;
+  return state;
+}
+
+const powerupState = makeEmptyPowerupState();
+Physics.step(powerupState, 1, {}, stableRandom);
+assert.equal(powerupState.powerup, null, 'the first power-up waits after all bricks have been cleared');
+assert.equal(powerupState.powerupSpawnMs, C.POWERUP_INITIAL_DELAY_MS);
+Physics.step(powerupState, C.POWERUP_INITIAL_DELAY_MS - 1, {}, stableRandom);
+assert.equal(powerupState.powerup, null, 'the initial power-up delay is three seconds');
+Physics.step(powerupState, 1, {}, stableRandom);
+assert.equal(powerupState.powerup.type, 'fire', 'the power-up type is selected randomly');
+assert.equal(powerupState.powerup.radius, C.BALL_RADIUS * 1.5);
+assert.equal(powerupState.powerupSpawnMs, null, 'an uncollected power-up does not have a respawn countdown');
+const iceSpawn = makeEmptyPowerupState();
+iceSpawn.powerupSpawnMs = 0;
+Physics.step(iceSpawn, 0, {}, () => 0.1);
+assert.equal(iceSpawn.powerup.type, 'ice', 'ice power-ups can also be selected');
+const uncollectedPowerup = { ...powerupState.powerup };
+Physics.step(powerupState, 10000, {}, stableRandom);
+assert.deepEqual(powerupState.powerup, uncollectedPowerup, 'an uncollected power-up remains available');
+
+const powerupBall = {
+  id: 1,
+  x: powerupState.powerup.x,
+  y: powerupState.powerup.y,
+  vx: 0,
+  vy: 0,
+  radius: C.BALL_RADIUS,
+  ownerColor: C.COLORS.neutral,
+  ownerIndex: null,
+  isMain: true,
+  trail: []
+};
+powerupState.balls = [powerupBall];
+Physics.step(powerupState, 0, {}, stableRandom);
+assert.equal(powerupState.powerup, null, 'a ball collects a power-up by passing through it');
+assert.equal(powerupBall.powerType, 'fire', 'the ball keeps the power-up type until it hits a paddle');
+assert.equal(powerupState.powerupSpawnMs, C.POWERUP_RESPAWN_MS, 'the respawn countdown starts only after collection');
+powerupState.balls = [];
+Physics.step(powerupState, C.POWERUP_RESPAWN_MS - 1, {}, stableRandom);
+assert.equal(powerupState.powerup, null, 'the next power-up waits for the full respawn interval');
+Physics.step(powerupState, 1, {}, stableRandom);
+assert.ok(powerupState.powerup, 'another power-up appears after the respawn interval');
+
+const centerPowerup = { type: 'ice', x: C.WIDTH / 2, y: C.HEIGHT / 2, radius: C.BALL_RADIUS * 1.5 };
+const bricksAroundPowerup = Physics.makeBricks(stableRandom, 4, centerPowerup);
+assert.ok(bricksAroundPowerup.length < C.BRICK_COLUMNS * C.BRICK_ROWS, 'brick grids leave the active power-up area clear');
+bricksAroundPowerup.forEach(brick => {
+  const closestX = Math.max(brick.x, Math.min(centerPowerup.x, brick.x + brick.width));
+  const closestY = Math.max(brick.y, Math.min(centerPowerup.y, brick.y + brick.height));
+  assert.ok((closestX - centerPowerup.x) ** 2 + (closestY - centerPowerup.y) ** 2 > centerPowerup.radius ** 2);
+});
+const powerupDuringBrickRespawn = makeEmptyPowerupState();
+powerupDuringBrickRespawn.powerup = centerPowerup;
+powerupDuringBrickRespawn.powerupSpawned = true;
+powerupDuringBrickRespawn.bricksRespawnMs = 1;
+Physics.step(powerupDuringBrickRespawn, 1, {}, stableRandom);
+assert.ok(powerupDuringBrickRespawn.bricks.length > 0, 'bricks still respawn while an uncollected power-up is active');
+powerupDuringBrickRespawn.bricks.forEach(brick => {
+  const closestX = Math.max(brick.x, Math.min(centerPowerup.x, brick.x + brick.width));
+  const closestY = Math.max(brick.y, Math.min(centerPowerup.y, brick.y + brick.height));
+  assert.ok((closestX - centerPowerup.x) ** 2 + (closestY - centerPowerup.y) ** 2 > centerPowerup.radius ** 2);
+});
+
+function makePowerupPaddleHit(type) {
+  const state = createPlayingState(2);
+  state.bricks = [];
+  state.bricksRespawnMs = 30000;
+  const player = state.players[0];
+  const paddle = Physics.paddleRect(player, state.playerCount);
+  state.balls = [{
+    id: 1,
+    x: paddle.center.x - paddle.outward.x * 14,
+    y: paddle.center.y,
+    vx: paddle.outward.x * 4,
+    vy: paddle.outward.y * 4,
+    radius: C.BALL_RADIUS,
+    ownerColor: C.COLORS.neutral,
+    ownerIndex: null,
+    isMain: true,
+    powerType: type,
+    trail: []
+  }];
+  return state;
+}
+
+const icedPlayer = makePowerupPaddleHit('ice');
+Physics.step(icedPlayer, 1000 / 60, {}, stableRandom);
+assert.equal(icedPlayer.players[0].powerEffect, 'ice', 'a paddle hit applies the collected ice effect');
+assert.equal(icedPlayer.players[0].powerEffectMs, C.POWERUP_DURATION_MS);
+assert.equal(icedPlayer.balls[0].powerType, null, 'a charged ball consumes its effect on the first paddle hit');
+
+const firedPlayer = makePowerupPaddleHit('fire');
+Physics.step(firedPlayer, 1000 / 60, {}, stableRandom);
+assert.equal(firedPlayer.players[0].powerEffect, 'fire', 'a paddle hit applies the collected fire effect');
+
+function playerMovement(effect) {
+  const state = createPlayingState(2);
+  state.balls = [];
+  state.bricks = [];
+  state.bricksRespawnMs = 30000;
+  state.players[0].powerEffect = effect;
+  state.players[0].powerEffectMs = effect ? C.POWERUP_DURATION_MS : 0;
+  Physics.step(state, 1000 / 60, { 0: 1 }, stableRandom);
+  return state.players[0].position - 0.5;
+}
+
+const normalMovement = playerMovement(null);
+assert.ok(Math.abs(playerMovement('ice') / normalMovement - 0.75) < 0.0001, 'ice slows paddle movement to 75%');
+assert.ok(Math.abs(playerMovement('fire') / normalMovement - 1.25) < 0.0001, 'fire speeds paddle movement to 125%');
+
+const expiredEffect = createPlayingState(2);
+expiredEffect.players[0].powerEffect = 'ice';
+expiredEffect.players[0].powerEffectMs = C.POWERUP_DURATION_MS;
+expiredEffect.balls = [];
+expiredEffect.bricks = [];
+expiredEffect.bricksRespawnMs = 30000;
+Physics.step(expiredEffect, C.POWERUP_DURATION_MS, {}, stableRandom);
+assert.equal(expiredEffect.players[0].powerEffect, null, 'player effects expire after eight seconds');
+
+console.log('PASS: 2-8 player arenas, configurable respawn, multiball limits, power-ups, particles, goals, bots, and match end.');

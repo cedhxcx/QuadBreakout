@@ -98,21 +98,62 @@
     });
   }
 
+  function drawPowerup(ctx, powerup, elapsedMs) {
+    if (!powerup) return;
+    const color = powerup.type === 'ice' ? C.POWERUP_ICE_COLOR : C.POWERUP_FIRE_COLOR;
+    const radius = powerup.radius * (1 + Math.sin(elapsedMs / 140) * 0.08);
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(powerup.x, powerup.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+
+    if (powerup.type === 'ice') {
+      for (let spoke = 0; spoke < 3; spoke++) {
+        const angle = spoke * Math.PI / 3;
+        const dx = Math.cos(angle);
+        const dy = Math.sin(angle);
+        ctx.beginPath();
+        ctx.moveTo(powerup.x - dx * 6, powerup.y - dy * 6);
+        ctx.lineTo(powerup.x + dx * 6, powerup.y + dy * 6);
+        ctx.stroke();
+      }
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(powerup.x, powerup.y + 7);
+      ctx.bezierCurveTo(powerup.x - 8, powerup.y + 1, powerup.x + 1, powerup.y - 2, powerup.x - 1, powerup.y - 8);
+      ctx.bezierCurveTo(powerup.x + 8, powerup.y - 3, powerup.x + 8, powerup.y + 4, powerup.x, powerup.y + 7);
+      ctx.fillStyle = '#fff3b0';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawPaddles(ctx, players, playerCount, arena) {
     players.forEach(player => {
       const paddle = window.QB.Physics.paddleRect(player, playerCount);
+      const effectColor = player.powerEffect === 'ice'
+        ? C.POWERUP_ICE_COLOR
+        : player.powerEffect === 'fire' ? C.POWERUP_FIRE_COLOR : null;
       ctx.save();
       ctx.translate(paddle.center.x, paddle.center.y);
       ctx.rotate(Math.atan2(paddle.tangent.y, paddle.tangent.x));
-      ctx.shadowBlur = 0;
+      ctx.shadowColor = effectColor || player.color;
+      ctx.shadowBlur = effectColor ? 15 : 0;
       const gradient = ctx.createLinearGradient(-paddle.length / 2, 0, paddle.length / 2, 0);
       gradient.addColorStop(0, '#ffffff');
-      gradient.addColorStop(0.22, player.color);
-      gradient.addColorStop(1, player.color);
+      gradient.addColorStop(0.22, effectColor || player.color);
+      gradient.addColorStop(1, player.powerEffect === 'ice' ? '#d9fbff' : player.powerEffect === 'fire' ? '#e72b18' : player.color);
       ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.roundRect(-paddle.length / 2, -paddle.thickness / 2, paddle.length, paddle.thickness, 7);
       ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.restore();
 
       const side = arena.sides[player.index];
@@ -129,20 +170,25 @@
 
   function drawBalls(ctx, balls) {
     balls.forEach(ball => {
+      const ballColor = ball.powerType === 'ice'
+        ? C.POWERUP_ICE_COLOR
+        : ball.powerType === 'fire' ? C.POWERUP_FIRE_COLOR : ball.ownerColor;
       ball.trail.forEach((point, index) => {
         const alpha = (1 - index / ball.trail.length) * 0.28;
         const radius = ball.radius * (1 - index / (ball.trail.length + 2)) * 0.78;
         ctx.beginPath();
         ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = ball.ownerColor;
+        ctx.fillStyle = ballColor;
         ctx.globalAlpha = alpha;
         ctx.fill();
       });
       ctx.globalAlpha = 1;
       ctx.save();
+      ctx.shadowColor = ballColor;
+      ctx.shadowBlur = ball.powerType ? 12 : 0;
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-      ctx.fillStyle = ball.ownerColor;
+      ctx.fillStyle = ballColor;
       ctx.fill();
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = '#fff';
@@ -168,6 +214,7 @@
     drawCachedBackground(ctx, state.playerCount, arena);
     drawGoals(ctx, state.players, arena);
     drawBricks(ctx, state.bricks || []);
+    drawPowerup(ctx, state.powerup, state.elapsedMs || 0);
     drawPaddles(ctx, state.players, state.playerCount, arena);
     drawBalls(ctx, state.balls || []);
     drawParticles(ctx, state.particles || []);
