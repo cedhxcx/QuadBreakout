@@ -289,6 +289,10 @@ fluidInterceptBot.elapsedMs = 116;
 const continuedDrift = AI.getMove(fluidInterceptBot, fluidInterceptBot.players[0]);
 assert.ok(continuedDrift < firstDrift && continuedDrift > -1, 'intercept steering changes gradually instead of trembling');
 
+const settlingBot = makeDifficultyThreat(3, 142.5);
+const finalApproachMove = AI.getMove(settlingBot, settlingBot.players[0], sequenceRandom([0.1, 0.5, 0.5, 0.75, 0.5]));
+assert.ok(Math.abs(finalApproachMove) < 0.1, 'bots settle onto the interception point just before contact');
+
 const wallBounceBot = makeDifficultyThreat(3);
 wallBounceBot.bricks = [];
 wallBounceBot.balls = [{ id: 1, x: 317.5, y: 600, vx: -5, vy: 8, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
