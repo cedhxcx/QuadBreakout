@@ -155,6 +155,7 @@
         player.name = name;
         player.connected = true;
         player.bot = false;
+        player.botDifficulty = null;
         notice = `${name} entrou na sala.`;
         return player.index;
       },
@@ -175,9 +176,11 @@
         player.move = 0;
         if (state.phase === 'PLAYING') {
           player.bot = true;
+          window.QB.Physics.assignBotDifficulty(player);
           player.name = `Bot ${player.sideName}`;
         } else {
           player.bot = false;
+          player.botDifficulty = null;
           player.name = `Vaga ${player.label}`;
         }
         notice = `${player.label}: ${state.phase === 'PLAYING' ? 'bot assumiu a vaga.' : 'jogador saiu.'}`;

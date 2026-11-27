@@ -16,6 +16,7 @@ O jogo não usa etapa de build nem dependências locais; PeerJS 1.5.4 é carrega
 - Com 2 participantes, a arena é um retângulo com jogadores nas laterais esquerda e direita; as bordas superior e inferior rebatem a bola.
 - Com 3 ou mais, a arena se transforma em um polígono regular com uma defesa por lado: triângulo, quadrado, pentágono até octógono.
 - As vagas sem jogadores humanos são preenchidas por bots quando a partida começa.
+- Cada bot recebe aleatoriamente uma dificuldade de 1 a 3, visível junto ao seu lado; eles patrulham e reposicionam a barra enquanto aguardam, com reação e precisão conforme o nível.
 - O host configura duração e pontuação-alvo.
 - Cada jogador escolhe sua própria cor no lobby. O host também configura o intervalo de reaparecimento dos blocos, de 30 a 120 segundos.
 - A, D e setas movem nas arestas horizontais; W, S e setas movem nas arestas verticais. Nas arenas poligonais, o movimento segue a direção da aresta mais próxima.

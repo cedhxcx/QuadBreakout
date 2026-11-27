@@ -30,12 +30,18 @@
       ...descriptor,
       connected: Boolean(connected),
       bot: false,
+      botDifficulty: null,
       score: 0,
       position: 0.5,
       move: 0,
       powerEffect: null,
       powerEffectMs: 0
     };
+  }
+
+  function assignBotDifficulty(player, random) {
+    player.botDifficulty = 1 + Math.floor((random || Math.random)() * 3);
+    return player.botDifficulty;
   }
 
   function createLobbyState(hostName, hostId, playerCount) {
@@ -240,10 +246,15 @@
 
   function startMatch(state, durationMinutes, scoreLimit, random, multiballIntervalSeconds) {
     const rand = random || Math.random;
+    if (window.QB.AI && typeof window.QB.AI.reset === 'function') window.QB.AI.reset();
     state.players.forEach(player => {
       if (!player.connected) {
         player.bot = true;
         player.name = `Bot ${player.sideName}`;
+        assignBotDifficulty(player, rand);
+      } else {
+        player.bot = false;
+        player.botDifficulty = null;
       }
       player.position = 0.5;
       player.score = 0;
@@ -666,6 +677,7 @@
 
   window.QB.Physics = Object.freeze({
     makePlayer,
+    assignBotDifficulty,
     createLobbyState,
     configurePlayerCount,
     startMatch,

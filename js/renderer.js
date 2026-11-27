@@ -163,7 +163,8 @@
       ctx.font = '600 10px ui-sans-serif, system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(player.name.slice(0, 12), side.midpoint.x + side.outward.x * 17, side.midpoint.y + side.outward.y * 17);
+      const label = player.bot && player.botDifficulty ? `BOT D${player.botDifficulty}` : player.name.slice(0, 12);
+      ctx.fillText(label, side.midpoint.x + side.outward.x * 17, side.midpoint.y + side.outward.y * 17);
       ctx.restore();
     });
   }

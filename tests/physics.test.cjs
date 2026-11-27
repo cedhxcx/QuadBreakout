@@ -142,6 +142,7 @@ Physics.step(delayedBricks, C.BRICK_RESPAWN_MS - 100, {}, stableRandom);
 assert.equal(delayedBricks.bricks.length, 0, 'bricks should not return before the configured interval');
 Physics.step(delayedBricks, 100, {}, stableRandom);
 assert.ok(delayedBricks.bricks.length >= 1 && delayedBricks.bricks.length <= 2, 'only multiball bricks return when the interval expires');
+assert.ok(delayedBricks.bricks.every(brick => brick.special), 'normal bricks are absent after a respawn too');
 
 const multiball = createPlayingState(3);
 multiball.bricks = [{ id: 1, x: 380, y: 390, width: 40, height: 20, special: true, hitsRemaining: 3 }];
@@ -197,6 +198,7 @@ brickRespawn.bricksRespawnMs = 10;
 brickRespawn.balls = [];
 Physics.step(brickRespawn, 20, {}, stableRandom);
 assert.ok(brickRespawn.bricks.length >= 1 && brickRespawn.bricks.length <= 2);
+assert.ok(brickRespawn.bricks.every(brick => brick.special));
 
 const winner = createPlayingState(8);
 winner.scoreLimit = 1;
@@ -204,6 +206,14 @@ winner.players[7].score = 1;
 Physics.step(winner, 1000 / 60, {}, stableRandom);
 assert.equal(winner.phase, 'GAMEOVER');
 assert.equal(winner.winnerIndex, 7);
+
+const botDifficultyState = Physics.createLobbyState('Host', 'host', 8);
+const difficultyRolls = [0.01, 0.34, 0.67, 0.99, 0.01, 0.34, 0.67];
+let difficultyRollIndex = 0;
+Physics.startMatch(botDifficultyState, 2, 30, () => difficultyRolls[difficultyRollIndex++] || 0.99);
+assert.deepEqual(botDifficultyState.players.slice(1).map(player => player.botDifficulty), [1, 2, 3, 3, 1, 2, 3]);
+assert.ok(botDifficultyState.players.slice(1).every(player => player.bot), 'all empty seats become difficulty-rated bots');
+assert.equal(botDifficultyState.players[0].botDifficulty, null, 'human players do not receive bot difficulty');
 
 const botState = createPlayingState(2);
 botState.players[0].bot = true;
@@ -235,6 +245,21 @@ const leftPatrol = createPlayingState(2);
 leftPatrol.players[0].bot = true;
 leftPatrol.balls = [{ id: 1, x: 400, y: 400, vx: 0, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
 assert.equal(AI.getMove(leftPatrol, leftPatrol.players[0], () => 0.1), -1, 'bots patrol instead of remaining centered when no ball is approaching');
+
+function makeDifficultyThreat(difficulty) {
+  const state = createPlayingState(2);
+  state.players[0].bot = true;
+  state.players[0].botDifficulty = difficulty;
+  state.balls = [{ id: 1, x: 200, y: 400, vx: -5, vy: 0, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
+  return state;
+}
+
+const roamingBot = makeDifficultyThreat(1);
+assert.equal(AI.getMove(roamingBot, roamingBot.players[0], () => 0.99), 1, 'low-difficulty bots reposition while the ball is still distant');
+roamingBot.elapsedMs = 1000;
+assert.equal(AI.getMove(roamingBot, roamingBot.players[0], () => 0.01), -1, 'roaming bots choose a new movement direction over time');
+const reactingBot = makeDifficultyThreat(3);
+assert.equal(AI.getMove(reactingBot, reactingBot.players[0], sequenceRandom([0.5, 0.9, 0.5, 0.5])), -1, 'high-difficulty bots react earlier to an incoming ball');
 
 function makeEmptyPowerupState() {
   const state = createPlayingState(2);
