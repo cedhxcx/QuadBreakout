@@ -10,6 +10,7 @@ O jogo não usa etapa de build nem dependências locais; PeerJS 1.5.4 é carrega
 
 ## Partida
 
+- O anfitrião cria uma sala com um código aleatório de quatro letras. O código aparece na URL e qualquer jogador pode copiar/compartilhar o link de convite; ao abrir, o código é preenchido automaticamente.
 - O host escolhe de 2 a 8 participantes no lobby.
 - Com 2 participantes, a arena é um retângulo com jogadores nas laterais esquerda e direita; as bordas superior e inferior rebatem a bola.
 - Com 3 ou mais, a arena se transforma em um polígono regular com uma defesa por lado: triângulo, quadrado, pentágono até octógono.

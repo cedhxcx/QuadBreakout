@@ -64,7 +64,7 @@
     el('lobbyOptions').hidden = !isHost;
     el('lobbyContent').classList.toggle('client-lobby', !isHost);
     el('startGameBtn').hidden = !isHost;
-    el('copyInviteBtn').hidden = !isHost;
+    el('copyInviteBtn').hidden = !roomCode;
     const ownPlayer = state.players[localIndex];
     el('playerColorInput').value = ownPlayer.color;
     el('playerColorInput').disabled = state.phase !== 'LOBBY';
@@ -74,7 +74,7 @@
       option.disabled = Number(option.value) <= lastConnectedIndex && Number(option.value) < state.playerCount;
     });
     el('lobbyStatus').textContent = notice || (isHost
-      ? 'Compartilhe o código. As vagas vazias viram bots ao iniciar.'
+      ? 'Compartilhe o convite. As vagas vazias viram bots ao iniciar.'
       : 'Aguardando o anfitrião iniciar a partida.');
   }
 
@@ -204,7 +204,8 @@
       isHost = true;
       localIndex = 0;
       roomCode = await window.QB.Network.createHost(makeNetworkHandlers());
-      notice = 'Sala criada. Compartilhe o código com seus amigos.';
+      updateRoomUrl(roomCode);
+      notice = 'Sala criada. Compartilhe o convite com seus amigos.';
       el('roomCodeInput').value = roomCode;
       renderLobby();
       showScreen('lobby');
@@ -249,6 +250,7 @@
           setStatus(el('menuStatus'), message, true);
         }
       });
+      updateRoomUrl(code);
       setStatus(el('menuStatus'), '', false);
     } catch (error) {
       setStatus(el('menuStatus'), error.message || 'Não foi possível entrar na sala.', true);
@@ -312,14 +314,12 @@
   async function copyInvite() {
     if (!roomCode) return;
     const invite = new URL(location.href);
-    invite.search = '';
-    invite.hash = '';
     invite.searchParams.set('room', roomCode);
     try {
       await navigator.clipboard.writeText(invite.href);
       notice = 'Convite copiado.';
     } catch (error) {
-      notice = `Código da sala: ${roomCode}`;
+      notice = `Copie este link: ${invite.href}`;
     }
     renderLobby();
   }
@@ -329,6 +329,7 @@
     state = null;
     isHost = false;
     roomCode = '';
+    updateRoomUrl('');
     localIndex = 0;
     keys.clear();
     notice = '';
@@ -338,11 +339,27 @@
 
   function onKey(event, down) {
     const key = event.key.toLowerCase();
-    if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'a', 'd', 'w', 's'].includes(key)) {
-      event.preventDefault();
-      if (down) keys.add(key);
-      else keys.delete(key);
+    if (!['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'a', 'd', 'w', 's'].includes(key)) return;
+    if (!down) {
+      keys.delete(key);
+      return;
     }
+
+    const target = event.target;
+    const isTextEntry = target && (
+      target.isContentEditable ||
+      ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+    );
+    if (currentScreen !== 'game' || isTextEntry) return;
+    event.preventDefault();
+    keys.add(key);
+  }
+
+  function updateRoomUrl(code) {
+    const url = new URL(location.href);
+    if (code) url.searchParams.set('room', code);
+    else url.searchParams.delete('room');
+    history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
   }
 
   function loop(now) {
