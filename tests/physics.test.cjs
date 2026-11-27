@@ -111,9 +111,26 @@ assert.equal(ownGoal.players[1].score, 0, 'own goals remove one point without go
 const neutralGoal = createPlayingState(4);
 neutralGoal.bricks = [];
 neutralGoal.bricksRespawnMs = 10000;
-neutralGoal.balls = [{ id: 1, x: 400, y: 80, vx: 0, vy: -4, radius: C.BALL_RADIUS, ownerColor: C.COLORS.neutral, ownerIndex: null, isMain: true, trail: [] }];
+const neutralBarrier = Physics.getSideGeometry(4, 1);
+neutralGoal.balls = [{
+  id: 1,
+  x: neutralBarrier.midpoint.x + neutralBarrier.outward.x * (C.BALL_RADIUS + 2),
+  y: neutralBarrier.midpoint.y + neutralBarrier.outward.y * (C.BALL_RADIUS + 2),
+  vx: neutralBarrier.outward.x * 4,
+  vy: neutralBarrier.outward.y * 4,
+  radius: C.BALL_RADIUS,
+  ownerColor: C.COLORS.neutral,
+  ownerIndex: null,
+  isMain: true,
+  trail: []
+}];
 Physics.step(neutralGoal, 1000 / 60, {}, stableRandom);
 assert.ok(neutralGoal.players.every(player => player.score === 0), 'neutral balls do not award points');
+assert.equal(neutralGoal.balls.length, 1, 'neutral balls bounce instead of being removed at a goal');
+const neutralBall = neutralGoal.balls[0];
+assert.ok(neutralBall.vx * neutralBarrier.outward.x + neutralBall.vy * neutralBarrier.outward.y < 0, 'neutral balls rebound toward the field');
+assert.ok((neutralBall.x - neutralBarrier.midpoint.x) * neutralBarrier.outward.x +
+  (neutralBall.y - neutralBarrier.midpoint.y) * neutralBarrier.outward.y < 0, 'neutral balls are moved back inside the barrier');
 
 const ordinaryBrick = createPlayingState(2);
 ordinaryBrick.bricks = [{ id: 1, x: 380, y: 390, width: 40, height: 20, special: false }];
@@ -263,13 +280,14 @@ assert.equal(AI.getMove(assertiveLowLevelBot, assertiveLowLevelBot.players[0], s
 const reactingBot = makeDifficultyThreat(3);
 assert.equal(AI.getMove(reactingBot, reactingBot.players[0], sequenceRandom([0.5, 0.9, 0.5, 0.5])), -1, 'high-difficulty bots react earlier to an incoming ball');
 
-const movingInterceptBot = makeDifficultyThreat(3);
-assert.equal(AI.getMove(movingInterceptBot, movingInterceptBot.players[0], sequenceRandom([0.1, 0.5, 0.5, 0.5])), 0, 'intercept movement starts from the planned contact point');
-movingInterceptBot.elapsedMs = 400;
-assert.equal(AI.getMove(movingInterceptBot, movingInterceptBot.players[0], () => 0.99), 1, 'bots make a lateral adjustment while tracking an incoming ball');
-movingInterceptBot.players[0].position = 0.54;
-movingInterceptBot.elapsedMs = 450;
-assert.equal(AI.getMove(movingInterceptBot, movingInterceptBot.players[0], () => 0.01), -1, 'bots keep moving around the intercept point instead of stopping there');
+const fluidInterceptBot = makeDifficultyThreat(3);
+assert.equal(AI.getMove(fluidInterceptBot, fluidInterceptBot.players[0], sequenceRandom([0.1, 0.5, 0.5, 0.5, 0.5])), 0, 'intercept movement begins at its planned contact point');
+fluidInterceptBot.elapsedMs = 100;
+const firstDrift = AI.getMove(fluidInterceptBot, fluidInterceptBot.players[0]);
+assert.ok(firstDrift < 0 && firstDrift > -1, 'bots smoothly adjust toward a nearby interception target');
+fluidInterceptBot.elapsedMs = 116;
+const continuedDrift = AI.getMove(fluidInterceptBot, fluidInterceptBot.players[0]);
+assert.ok(continuedDrift < firstDrift && continuedDrift > -1, 'intercept steering changes gradually instead of trembling');
 
 const wallBounceBot = makeDifficultyThreat(3);
 wallBounceBot.bricks = [];

@@ -4,9 +4,9 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const randomRange = (min, max, random) => min + (max - min) * random();
   const profiles = {
-    1: { reactionFrames: 40, roamRadius: 0.42, minShift: 0.14, aimError: 0.06, maxImpactOffset: 0.5, roamMinMs: 500, roamMaxMs: 950, interceptRadius: 0.06, interceptMinShift: 0.04, interceptMoveMinMs: 220, interceptMoveMaxMs: 360 },
-    2: { reactionFrames: 54, roamRadius: 0.3, minShift: 0.11, aimError: 0.04, maxImpactOffset: 0.65, roamMinMs: 700, roamMaxMs: 1200, interceptRadius: 0.05, interceptMinShift: 0.035, interceptMoveMinMs: 250, interceptMoveMaxMs: 400 },
-    3: { reactionFrames: 72, roamRadius: 0.2, minShift: 0.08, aimError: 0.02, maxImpactOffset: 0.75, roamMinMs: 850, roamMaxMs: 1400, interceptRadius: 0.045, interceptMinShift: 0.03, interceptMoveMinMs: 300, interceptMoveMaxMs: 500 }
+    1: { reactionFrames: 40, roamRadius: 0.42, minShift: 0.14, aimError: 0.06, maxImpactOffset: 0.5, roamMinMs: 500, roamMaxMs: 950, interceptRadius: 0.06, interceptGain: 14, interceptPeriodMinMs: 1200, interceptPeriodMaxMs: 1800 },
+    2: { reactionFrames: 54, roamRadius: 0.3, minShift: 0.11, aimError: 0.04, maxImpactOffset: 0.65, roamMinMs: 700, roamMaxMs: 1200, interceptRadius: 0.05, interceptGain: 16, interceptPeriodMinMs: 1400, interceptPeriodMaxMs: 2000 },
+    3: { reactionFrames: 72, roamRadius: 0.2, minShift: 0.08, aimError: 0.02, maxImpactOffset: 0.75, roamMinMs: 850, roamMaxMs: 1400, interceptRadius: 0.045, interceptGain: 18, interceptPeriodMinMs: 1600, interceptPeriodMaxMs: 2200 }
   };
 
   function chooseImpactOffset(random, profile) {
@@ -50,7 +50,8 @@
       aimError,
       aimPosition,
       targetPosition: aimPosition,
-      nextMoveAt: now + randomRange(profile.interceptMoveMinMs, profile.interceptMoveMaxMs, random),
+      wanderPhase: random() * Math.PI * 2,
+      wanderPeriodMs: randomRange(profile.interceptPeriodMinMs, profile.interceptPeriodMaxMs, random),
       expiresAt: now + Math.max(250, candidate.time * (1000 / 60) + 350)
     };
   }
@@ -104,27 +105,17 @@
 
     if (plan.mode === 'intercept' && focused) {
       plan.aimPosition = clamp(0.5 + (focused.alongSide - plan.contactOffset + plan.aimError) / travel, 0, 1);
-      if (now >= plan.nextMoveAt || (plan.hasWandered && Math.abs(plan.targetPosition - player.position) < 0.02)) {
-        const urgency = clamp(focused.time / profile.reactionFrames, 0.25, 1);
-        const contactMargin = Math.max(0, paddleLength / 2 + focused.ball.radius -
-          Math.abs(plan.contactOffset) - Math.abs(plan.aimError));
-        const safeRadius = Math.min(profile.interceptRadius, contactMargin / travel * 0.7);
-        const radius = safeRadius * (0.55 + urgency * 0.45);
-        const minPosition = clamp(plan.aimPosition - radius, 0.04, 0.96);
-        const maxPosition = clamp(plan.aimPosition + radius, 0.04, 0.96);
-        let targetPosition = clamp(plan.aimPosition + (rand() * 2 - 1) * radius, minPosition, maxPosition);
-        const minShift = Math.min(profile.interceptMinShift, radius * 0.8);
-        if (Math.abs(targetPosition - player.position) < minShift) {
-          const direction = rand() < 0.5 ? -1 : 1;
-          targetPosition = clamp(player.position + direction * minShift, minPosition, maxPosition);
-        }
-        plan.targetPosition = targetPosition;
-        plan.nextMoveAt = now + randomRange(profile.interceptMoveMinMs, profile.interceptMoveMaxMs, rand);
-        plan.hasWandered = true;
-      }
+      const urgency = clamp(focused.time / profile.reactionFrames, 0, 1);
+      const contactMargin = Math.max(0, paddleLength / 2 + focused.ball.radius -
+        Math.abs(plan.contactOffset) - Math.abs(plan.aimError));
+      const safeRadius = Math.min(profile.interceptRadius, contactMargin / travel * 0.7);
+      const radius = safeRadius * (0.2 + urgency * 0.8);
+      const wander = Math.sin(now / plan.wanderPeriodMs * Math.PI * 2 + plan.wanderPhase) * radius;
+      plan.targetPosition = clamp(plan.aimPosition + wander, 0.04, 0.96);
     }
 
     const delta = plan.targetPosition - player.position;
+    if (plan.mode === 'intercept') return Math.abs(delta) < 0.002 ? 0 : clamp(delta * profile.interceptGain, -1, 1);
     return Math.abs(delta) < 0.012 ? 0 : Math.sign(delta);
   }
 

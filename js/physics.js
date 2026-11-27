@@ -495,6 +495,16 @@
     return -1;
   }
 
+  function bounceNeutralBall(ball, state, sideIndex) {
+    const side = getArenaGeometry(state.playerCount).sides[sideIndex];
+    const signedDistance = (ball.x - side.midpoint.x) * side.outward.x +
+      (ball.y - side.midpoint.y) * side.outward.y;
+    const correction = signedDistance + ball.radius;
+    ball.x -= side.outward.x * correction;
+    ball.y -= side.outward.y * correction;
+    reflect(ball, -side.outward.x, -side.outward.y);
+  }
+
   function bounceFromPaddle(ball, player, playerCount) {
     const paddle = paddleRect(player, playerCount);
     const collision = circlePaddle(ball, paddle);
@@ -627,8 +637,14 @@
 
       if (state.playerCount === 2) bounceTwoPlayerWalls(ball);
       const goalSide = exitSide(ball, state);
-      if (goalSide !== -1) scoreGoal(state, ball, goalSide, rand);
-      else remainingBalls.push(ball);
+      if (goalSide !== -1) {
+        if (ball.ownerIndex === null || ball.ownerIndex === undefined) bounceNeutralBall(ball, state, goalSide);
+        else {
+          scoreGoal(state, ball, goalSide, rand);
+          return;
+        }
+      }
+      remainingBalls.push(ball);
     });
     state.balls = remainingBalls.concat(spawnedBalls);
 
