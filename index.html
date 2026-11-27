@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090d18">
+  <meta name="description" content="QuadBreakout: breakout multiplayer arcade para 2 a 8 jogadores.">
+  <title>QuadBreakout</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script defer src="js/constants.js"></script>
+  <script defer src="js/physics.js"></script>
+  <script defer src="js/ai.js"></script>
+  <script defer src="js/renderer.js"></script>
+  <script defer src="js/network.js"></script>
+  <script defer src="js/main.js"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="QuadBreakout início">
+        <span class="brand-mark" aria-hidden="true">Q</span>
+        <span>QUAD<span class="brand-accent">BREAKOUT</span></span>
+      </a>
+      <p class="tagline">2 a 8 jogadores. Uma arena. Nenhuma trégua.</p>
+    </header>
+
+    <section id="menuScreen" class="screen menu-screen" aria-labelledby="menuTitle">
+      <div class="menu-card">
+        <p class="eyebrow">ARCADE MULTIPLAYER • 2 A 8 JOGADORES</p>
+        <h1 id="menuTitle">Defenda seu lado.</h1>
+        <p class="intro">Rebata a bola, destrua os blocos e marque antes que ela atravesse sua defesa.</p>
+        <label class="field-label" for="playerName">Seu nome</label>
+        <input id="playerName" class="text-input" maxlength="16" autocomplete="nickname" value="Jogador">
+        <div class="menu-actions">
+          <button id="createRoomBtn" class="button button-primary">Criar sala</button>
+          <div class="join-row">
+            <input id="roomCodeInput" class="text-input room-code-input" maxlength="4" placeholder="CÓDIGO" aria-label="Código da sala">
+            <button id="joinRoomBtn" class="button button-secondary">Entrar</button>
+          </div>
+        </div>
+        <p id="menuStatus" class="status" role="status" aria-live="polite"></p>
+        <div class="how-to-play">
+          <h2>Como jogar</h2>
+          <p>Use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ou as setas; a barra acompanha a direção da sua aresta.</p>
+          <p>Desvie a bola para os adversários. Bolas da sua cor marcam pontos; bolas brancas são neutras.</p>
+        </div>
+      </div>
+      <div class="orbit-art" aria-hidden="true">
+        <span class="orbit orbit-one"></span><span class="orbit orbit-two"></span>
+        <span class="orbit-ball"></span><span class="orbit-core"></span>
+      </div>
+    </section>
+
+    <section id="lobbyScreen" class="screen lobby-screen" aria-labelledby="lobbyTitle" hidden>
+      <div class="lobby-card">
+        <div class="lobby-heading">
+          <div>
+            <p class="eyebrow">SALA DE JOGO</p>
+            <h1 id="lobbyTitle">Monte sua arena</h1>
+          </div>
+          <div class="room-code-box"><span>CÓDIGO</span><strong id="roomCodeLabel">----</strong></div>
+        </div>
+        <div class="lobby-content">
+          <div class="seat-list" id="seatList" aria-label="Jogadores e lados"></div>
+          <aside id="lobbyOptions" class="lobby-options">
+            <label class="field-label" for="playerCountInput">Jogadores na arena</label>
+            <select id="playerCountInput" class="text-input">
+              <option value="2">2 jogadores</option>
+              <option value="3">3 jogadores</option>
+              <option value="4" selected>4 jogadores</option>
+              <option value="5">5 jogadores</option>
+              <option value="6">6 jogadores</option>
+              <option value="7">7 jogadores</option>
+              <option value="8">8 jogadores</option>
+            </select>
+            <label class="field-label" for="durationInput">Duração da partida (min)</label>
+            <input id="durationInput" class="text-input" type="number" min="1" max="10" value="2">
+            <label class="field-label" for="scoreLimitInput">Pontos para vencer</label>
+            <input id="scoreLimitInput" class="text-input" type="number" min="1" max="100" value="30">
+            <p class="hint">Lados vazios serão preenchidos por bots quando a partida começar.</p>
+          </aside>
+        </div>
+        <div class="lobby-footer">
+          <button id="copyInviteBtn" class="button button-secondary">Copiar convite</button>
+          <span id="lobbyStatus" class="status" role="status" aria-live="polite"></span>
+          <button id="startGameBtn" class="button button-primary">Iniciar partida</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="gameScreen" class="screen game-screen" aria-label="QuadBreakout partida" hidden>
+      <div class="game-topbar">
+        <div id="gameRoomLabel" class="game-room-label"></div>
+        <div id="gameTimer" class="game-timer" aria-live="off">02:00</div>
+        <div id="connectionLabel" class="connection-label">Conectando</div>
+      </div>
+      <div id="scoreboard" class="scoreboard" aria-label="Placar"></div>
+      <div class="arena-frame">
+        <canvas id="gameCanvas" width="800" height="800" aria-label="Arena de jogo QuadBreakout"></canvas>
+      </div>
+      <p id="gameHint" class="game-hint">Defenda sua borda e mande a bola para os adversários.</p>
+    </section>
+
+    <section id="gameOverScreen" class="screen gameover-screen" aria-labelledby="gameOverTitle" hidden>
+      <div class="gameover-card">
+        <p class="eyebrow">FIM DE JOGO</p>
+        <h1 id="gameOverTitle">Partida encerrada</h1>
+        <p id="winnerText" class="winner-text"></p>
+        <div id="finalScores" class="final-scores"></div>
+        <button id="leaveGameBtn" class="button button-primary">Voltar ao menu</button>
+      </div>
+    </section>
+
+    <footer class="site-footer">
+      <span>Peer-to-peer • Sem servidor de jogo</span>
+      <span>QUADBREAKOUT / 01</span>
+    </footer>
+  </main>
+</body>
+</html>
